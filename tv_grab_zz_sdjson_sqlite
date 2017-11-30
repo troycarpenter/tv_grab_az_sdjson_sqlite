@@ -44,6 +44,7 @@
 #
 # Version history:
 #
+# 2017/11/30 - 1.35 - Populate thetvdb episode-num.
 # 2017/10/11 - 1.34 - download artwork.
 # 2017/07/21 - 1.33 - dtd compliance.  Only actors can have roles
 # 2017/06/19 - 1.32 - derive category from showtype
@@ -1836,6 +1837,8 @@ $w->startTag('tv',
         my $showTotalSeasons;
         my $showingPart;
         my $showingTotalParts;
+        my $thetvdbSeriesID;
+        my $thetvdbEpisodeID;
         if (defined($supplementalDetails->{'metadata'}))
           {
             foreach my $meta(@{$supplementalDetails->{'metadata'}})
@@ -1843,13 +1846,17 @@ $w->startTag('tv',
                 last if ((!defined($supplementalDetails->{'programID'})) ||
                          ('SH' ne substr($supplementalDetails->{'programID'}, 0, 2)));
                 # We only support Gracenote season/episode metadata
+                # and TheTVDB series/episode link.
                 if (defined($meta->{'Gracenote'}))
                   {
                     $showSeason = $meta->{'Gracenote'}->{'season'};
                     $showEpisode = $meta->{'Gracenote'}->{'episode'};
                     $showTotalSeasons = $meta->{'Gracenote'}->{'totalSeasons'};
                     $showTotalEpisodes = $meta->{'Gracenote'}->{'totalEpisodes'};
-                    last;
+                  } elsif (defined($meta->{'TheTVDB'}))
+                  {
+                      $thetvdbSeriesID = $meta->{'TheTVDB'}->{seriesID};
+                      $thetvdbEpisodeID = $meta->{'TheTVDB'}->{episodeID};
                   }
               }
           }
@@ -1858,6 +1865,7 @@ $w->startTag('tv',
             foreach my $meta(@{$programDetails->{'metadata'}})
               {
                 # We only support Gracenote season/episode metadata
+                # and TheTVDB series/episode link.
                 if (defined($meta->{'Gracenote'}))
                   {
                     if (substr($pID, 0, 2) eq 'SH')
@@ -1873,7 +1881,10 @@ $w->startTag('tv',
                         $programEpisode = $meta->{'Gracenote'}->{'episode'};
                         $programTotalEpisodes = $meta->{'Gracenote'}->{'totalEpisodes'};
                       }
-                    last;
+                  } elsif (defined($meta->{'TheTVDB'}))
+                  {
+                      $thetvdbSeriesID = $meta->{'TheTVDB'}->{seriesID};
+                      $thetvdbEpisodeID = $meta->{'TheTVDB'}->{episodeID};
                   }
               }
           }
@@ -1891,6 +1902,14 @@ $w->startTag('tv',
           {
             $w->dataElement('episode-num', " $season . $episode . $part ", 'system' => 'xmltv_ns');
           }
+        # Format is series/id or episode/id.
+        # http://xmltv.cvs.sourceforge.net/viewvc/xmltv/xmltv/xmltv.dtd?r1=1.45&r2=1.46
+        if ($thetvdbSeriesID) {
+            $w->dataElement('episode-num', "series/$thetvdbSeriesID", system => 'thetvdb.com');
+        }
+        if ($thetvdbEpisodeID) {
+            $w->dataElement('episode-num', "episode/$thetvdbEpisodeID", system => 'thetvdb.com');
+        }
 
         if (defined($scheduleDetails->{'videoProperties'}))
           {
