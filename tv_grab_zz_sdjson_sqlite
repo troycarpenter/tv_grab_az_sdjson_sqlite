@@ -1839,6 +1839,8 @@ $w->startTag('tv',
         my $showingTotalParts;
         my $thetvdbSeriesID;
         my $thetvdbEpisodeID;
+        my $thetvdbSeason;
+        my $thetvdbEpisode;
         if (defined($supplementalDetails->{'metadata'}))
           {
             foreach my $meta(@{$supplementalDetails->{'metadata'}})
@@ -1885,6 +1887,8 @@ $w->startTag('tv',
                   {
                       $thetvdbSeriesID = $meta->{'TheTVDB'}->{seriesID};
                       $thetvdbEpisodeID = $meta->{'TheTVDB'}->{episodeID};
+                      $thetvdbSeason = $meta->{'TheTVDB'}->{season};
+                      $thetvdbEpisode = $meta->{'TheTVDB'}->{episode};
                   }
               }
           }
@@ -1895,8 +1899,20 @@ $w->startTag('tv',
           }
         $programSeason = $showSeason if (!defined($programSeason));
         $showTotalSeasons = undef if (exists($GRABBER_FIXUPS->{'NO_XMLTV_NS_TOTAL_SEASONS'}));
-        $season = generateXMLTV_NS($programSeason, $showTotalSeasons);
-        $episode = generateXMLTV_NS($programEpisode, $programTotalEpisodes);
+        # Prefer TVDB season/episode if it is available since external
+        # metadata lookups will fail otherwise. For example, CSI:Miami
+        # S3E25 on Gracenote is S3E24 on TVDB and on other metadata
+        # systems due to Gracenote having a gap for an unaired S3E17.
+        # But we only use the TVDB if it differs since Gracenote often
+        # has total number of episodes/seasons.
+        if (($thetvdbSeason  && $programSeason  && ($thetvdbSeason  != $programSeason)) ||
+            ($thetvdbEpisode && $programEpisode && ($thetvdbEpisode != $programEpisode))) {
+            $season = generateXMLTV_NS($thetvdbSeason, undef);
+            $episode = generateXMLTV_NS($thetvdbEpisode, undef);
+        } else {
+            $season = generateXMLTV_NS($programSeason, $showTotalSeasons);
+            $episode = generateXMLTV_NS($programEpisode, $programTotalEpisodes);
+        }
         $part = generateXMLTV_NS($showingPart, $showingTotalParts);
         if (($season ne '') || ($episode ne '') || ($part ne ''))
           {
