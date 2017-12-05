@@ -2023,7 +2023,9 @@ $w->startTag('tv',
                 $w->dataElement('last-chance', $premiereType);
               }
           }
-
+        elsif ($scheduleDetails->{'new'}) {
+            $w->emptyTag('premiere');
+        }
         # Carried forward from audio eval to match DTD
         $w->emptyTag('subtitles', 'type' => 'teletext') if ($audioHasCC);
 
