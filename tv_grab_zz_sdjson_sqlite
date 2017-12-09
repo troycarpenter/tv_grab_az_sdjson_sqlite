@@ -113,6 +113,7 @@ use DateTime;
 use DateTime::TimeZone;
 use DateTime::Format::ISO8601;
 use DateTime::Format::SQLite;
+use DateTime::Format::Strptime;
 use POSIX qw(strftime);
 use List::MoreUtils qw(natatime);
 use List::Util qw/min max/;
@@ -120,6 +121,7 @@ use DBI;
 use DBI qw(:sql_types);
 use DBD::SQLite;
 use Scalar::Util qw/looks_like_number/;
+use Storable qw(dclone);
 use Data::Dumper;
 
 my $RFC2838_COMPLIANT          = 1;            # RFC2838 compliant station ids, which makes XMLTV
@@ -183,7 +185,7 @@ my $conf;
       preferredmethod => 'allatonce',
       version => "$SCRIPT_VERSION",
       description => 'Multinational (Schedules Direct JSON web services with SQLite DB)',
-      extra_options => [qw/manage-lineups force-download download-only no-download passwordhash=s/],
+      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n passwordhash=s/],
       defaults => { days => 30 },
     }
   );
@@ -1289,6 +1291,23 @@ my $crewMap =
     'Original Music and Songs'         => 'composer'
   };
 
+  output_xml();
+#
+# Our work here is done
+#
+
+finalize:
+
+if (!$opt->{'no-prune'}) {
+    print (STDERR "Pruning the local database\n") if (!$quiet);
+    DB_prune();
+}
+
+exit(0);
+
+
+
+sub output_xml {
 my $w = XML::Writer->new( 'ENCODING' => 'UTF-8',
                           'DATA_MODE' => 1,
                           'DATA_INDENT' => 1,
@@ -1305,7 +1324,16 @@ $w->startTag('tv',
 
   my $channelsWritten = channelWriter($conf->{'lineup'}->[0], $w);
   print (STDERR "   $channelsWritten channels processed\n") if (!$quiet);
+  my $programsWritten = programWriter($w);
+  print (STDERR "   $programsWritten program schedules processed\n") if (!$quiet);
+  $w->endTag('tv');
+  $w->end();
+}
 
+my ($prog1, $prog2, $prog3);
+
+sub programWriter {
+    my $w = shift;
   #
   # Select out schedules/programs
   #
@@ -1317,9 +1345,10 @@ $w->startTag('tv',
   # desirable, but when you get back 40-50% of the cpu
   # it is a necessary compromise
   #
-  $sql = "select schedules.station, schedules.starttime, schedules.duration, schedules.program, schedules.details, programs.details, strftime('%Y%m%d%H%M%S', schedules.starttime), strftime('%Y%m%d%H%M%S', datetime(schedules.starttime, '+' || schedules.duration || ' seconds')), stations.details, supplemental.details, artwork.details, supart.details from schedules as schedules left join programs as programs on programs.program = schedules.program left join stations as stations on stations.station = schedules.station left join programs as supplemental on programs.program_supplemental = supplemental.program left join artwork as artwork on programs.program = artwork.program left join artwork as supart on programs.program_supplemental = supart.program where schedules.station in (select distinct stations.station from stations as stations where stations.station in ( select distinct channels.station from channels as channels where channels.lineup = ? and channels.selected = 1)) AND schedules.day >= ? and schedules.day < ? order by schedules.station, schedules.starttime";
 
-  $sth = $DBH->prepare_cached($sql);
+  my $sql = "select schedules.station, schedules.starttime, schedules.duration, schedules.program, schedules.details, programs.details, strftime('%Y%m%d%H%M%S', schedules.starttime), strftime('%Y%m%d%H%M%S', datetime(schedules.starttime, '+' || schedules.duration || ' seconds')), stations.details, supplemental.details, artwork.details, supart.details from schedules as schedules left join programs as programs on programs.program = schedules.program left join stations as stations on stations.station = schedules.station left join programs as supplemental on programs.program_supplemental = supplemental.program left join artwork as artwork on programs.program = artwork.program left join artwork as supart on programs.program_supplemental = supart.program where schedules.station in (select distinct stations.station from stations as stations where stations.station in ( select distinct channels.station from channels as channels where channels.lineup = ? and channels.selected = 1)) AND schedules.day >= ? and schedules.day < ? order by schedules.station, schedules.starttime";
+
+  my $sth = $DBH->prepare_cached($sql);
   if (!defined($sth))
     {
       print (STDERR "Unexpected error when preparing statement ($sql): " . $DBH->errstr . "\n");
@@ -1359,8 +1388,108 @@ $w->startTag('tv',
 
   my $programsWritten = 0;
 
-  while (my $r = $sth->fetchrow_arrayref())
-    {
+  while (my $r = $sth->fetchrow_arrayref()) {
+      $programsWritten += output_program($w, $r);
+  }
+    # We might have some programmes left over, so write them now.
+  $programsWritten += output_program($w, $prog1->{db}) if $prog1;
+  $programsWritten += output_program($w, $prog2->{db}) if $prog2;
+  $programsWritten += output_program($w, $prog3->{db}) if $prog3;
+  return $programsWritten;
+}
+
+sub get_title {
+    my ($r) = @_;
+    my $programDetails = $r->{programDetails};
+    my $supplementalDetails = $r->{supplementalDetails};
+
+    # Mandatory title array should (must?) contain title120, but may
+    # contain others?
+    if (defined($programDetails->{'titles'})) {
+        foreach my $title(@{$programDetails->{'titles'}}) {
+            return $title->{title120} if defined($title->{'title120'});
+        }
+    }
+    elsif (defined($supplementalDetails->{'titles'})) {
+        foreach my $title(@{$supplementalDetails->{'titles'}}) {
+            return $title->{title120} if defined $title->{title120};
+      }
+    }
+
+
+sub output_program {
+    my ($w, $r) = @_;
+    state $strp = DateTime::Format::Strptime->new(
+                                           pattern   => '%Y%m%d%H%M%S',
+                                           time_zone => 'GMT',
+                                           on_error => 'croak',
+                                                 );
+    state $merge_split = $opt->{'merge-split'};
+    my $programDetails = $JSON->decode($r->[5]) if defined($r->[5]);
+    my $supplementalDetails = $JSON->decode($r->[9]) if defined($r->[9]);
+    # Shortcut logic if we are not merging programmes.
+    if (!$merge_split) {
+        return write_programme($w, { db => $r, programDetails => $programDetails, supplementalDetails => $supplementalDetails })
+    }
+
+    my $r2 = { db => dclone($r), # Need a deep clone otherwise all entries point to the same thing.
+               programDetails => $programDetails,
+               supplementalDetails => $supplementalDetails,
+             };
+
+    if (!$prog1) {
+        $prog1 = $r2;
+        return 0;
+    }
+    if (!$prog2) {
+        $prog2 = $r2;
+        return 0;
+    }
+    $prog3 = $r2;
+
+    # Only movies can be split for news.
+    my $progid1 = $prog1->{db}->[3];
+    return print_and_shuffle_programmes($w) if !$progid1 || $progid1 !~ /^MV/;
+    my $progid3 = $prog3->{db}->[3];
+    return print_and_shuffle_programmes($w) if !$progid3 || $progid1 ne $progid3;
+
+    # Both parts should have the same title (safety check)
+    my $title1 = get_title($prog1);
+    my $title3 = get_title($prog3);
+    return print_and_shuffle_programmes($w) if $title1 ne $title3;
+
+    my $dt2_start = $strp->parse_datetime($prog2->{db}->[6]);
+    my $dt2_stop = $strp->parse_datetime($prog2->{db}->[7]);
+    my $dt2_dur = $dt2_stop - $dt2_start;
+    my $dt2_min = $dt2_dur->in_units('minutes');
+    # News programmes for split movies are only short.
+    return print_and_shuffle_programmes($w) if $dt2_min > $merge_split;
+
+    # If here we need to erase the middle programme.
+    my $title2 = get_title($prog2);
+    my $progid2 = $prog2->{db}->[3];
+    $w->comment("Merging programmes for '$title1' ($progid1) and removing '$title2' ($progid2) of $dt2_min minute duration");
+    # Extend the stop time for programme 1 to be the end of programme 3.
+    $prog1->{db}->[7] = $prog3->{db}->[7];
+    undef $prog2;
+    undef $prog3;
+    return print_and_shuffle_programmes($w);
+}
+
+sub print_and_shuffle_programmes {
+    my ($w) = @_;
+    write_programme($w, $prog1);
+    $prog1 = $prog2;
+    $prog2 = $prog3;
+    $prog3 = undef;
+    return 1;
+}
+
+sub write_programme {
+    my ($w, $r2) = @_;
+    my $programDetails = $r2->{programDetails};
+    my $supplementalDetails = $r2->{supplementalDetails};
+    my $r = $r2->{db};
       my $sID = $r->[0];
       # Note that we should legitmately parse the datetime here, but
       # the performance absolutely sucks, so we let sqlite do this
@@ -1368,20 +1497,10 @@ $w->startTag('tv',
       # my $endTime = $startTime->clone()->add(seconds => $r->[2]);
       my $pID = $r->[3];
       my $scheduleDetails = $JSON->decode($r->[4]);
-      my $programDetails;
-      if (defined($r->[5]))
-        {
-          $programDetails = $JSON->decode($r->[5]);
-        }
       my $stationDetails;
       if (defined($r->[8]))
         {
           $stationDetails = $JSON->decode($r->[8]);
-        }
-      my $supplementalDetails;
-      if (defined($r->[9]))
-        {
-          $supplementalDetails = $JSON->decode($r->[9]);
         }
       my $artwork;
       if (defined($r->[10]))
@@ -1397,29 +1516,8 @@ $w->startTag('tv',
                                 'start'   => "$r->[6] +0000",
                                 'stop'    => "$r->[7] +0000");
 
-        # Mandatory title array should (must?) contain title120, but may
-        # contain others?
-        if (defined($programDetails->{'titles'}))
-          {
-            foreach my $title(@{$programDetails->{'titles'}})
-              {
-                if (defined($title->{'title120'}))
-                  {
-                    $w->dataElement('title', $title->{'title120'});
-                  }
-              }
-          }
-        elsif (defined($supplementalDetails->{'titles'}))
-          {
-            foreach my $title(@{$supplementalDetails->{'titles'}})
-              {
-                if (defined($title->{'title120'}))
-                  {
-                    $w->dataElement('title', $title->{'title120'});
-                  }
-              }
-          }
-
+    my $title = get_title($r2);
+    $w->dataElement('title', $title) if ($title);
         if (defined($programDetails->{'episodeTitle150'}))
           {
             $w->dataElement('sub-title', $programDetails->{'episodeTitle150'});
@@ -2171,26 +2269,9 @@ $w->startTag('tv',
           }
 
       $w->endTag('programme');
-
-      $programsWritten++;
     }
-
-  $w->endTag('tv');
-$w->end();
-
-print (STDERR "   $programsWritten program schedules processed\n") if (!$quiet);
-
-#
-# Our work here is done
-#
-
-finalize:
-
-print (STDERR "Pruning the local database\n") if (!$quiet);
-
-DB_prune();
-
-exit(0);
+    return 1;
+}
 
 #
 # configureGrabber
