@@ -185,7 +185,7 @@ my $conf;
       preferredmethod => 'allatonce',
       version => "$SCRIPT_VERSION",
       description => 'Multinational (Schedules Direct JSON web services with SQLite DB)',
-      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n passwordhash=s/],
+      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n passwordhash=s/],
       defaults => { days => 30 },
     }
   );
@@ -1424,7 +1424,7 @@ sub output_program {
                                            time_zone => 'GMT',
                                            on_error => 'croak',
                                                  );
-    state $merge_split = $opt->{'merge-split'};
+    state $merge_split = $opt->{'merge-split'} // $conf->{'merge-split'};
     my $programDetails = $JSON->decode($r->[5]) if defined($r->[5]);
     my $supplementalDetails = $JSON->decode($r->[9]) if defined($r->[9]);
     # Shortcut logic if we are not merging programmes.
@@ -7770,6 +7770,9 @@ sub getEpisodeImageFromArtwork
       return unless $art;
       return unless $art->{data};
       return unless ref($art->{data}) eq 'ARRAY';
+      # Allow user to configure maximum size we prefer our artwork.
+      # If we find no decent artwork then we may use larger.
+      state $maxWidth = $opt->{'artwork-max-width'} // $conf->{'artwork-max-width'} // 1080;
       # For the moment simply return the first match we find that
       # exceeds the given width and is of an appropriate category
       # since any art is better than no art. If $allowAnyArt then
@@ -7791,6 +7794,7 @@ sub getEpisodeImageFromArtwork
                   # https://github.com/SchedulesDirect/JSON-Service/wiki/API-20141201#field-meanings
                   my $category = $d->{category};
                   $canUseImage = $imgWidth > $minWidth &&
+                    $imgWidth < $maxWidth &&
                     ($category eq 'Poster Art' ||
                      $category eq 'Box Art' ||
                      $category eq 'VOD Art' ||
