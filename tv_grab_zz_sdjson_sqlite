@@ -185,7 +185,7 @@ my $conf;
       preferredmethod => 'allatonce',
       version => "$SCRIPT_VERSION",
       description => 'Multinational (Schedules Direct JSON web services with SQLite DB)',
-      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n passwordhash=s/],
+      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s passwordhash=s/],
       defaults => { days => 30 },
     }
   );
@@ -195,6 +195,7 @@ my $conf;
 $debug = $opt->{'debug'};
 $quiet = $opt->{'quiet'};
 $passwordHash = $opt->{'passwordhash'};
+my $channelRegex = $opt->{'channel-regex'};
 
 $SD->Debug(1) if ($debug);
 
@@ -1426,10 +1427,15 @@ sub output_program {
                                                  );
     state $merge_split = $opt->{'merge-split'} // $conf->{'merge-split'};
     my $programDetails = $JSON->decode($r->[5]) if defined($r->[5]);
+    my $stationDetails = $JSON->decode($r->[8]) if defined $r->[8];
     my $supplementalDetails = $JSON->decode($r->[9]) if defined($r->[9]);
+    return 0 if ($channelRegex && $stationDetails && $stationDetails->{name} && $stationDetails->{name} !~ $channelRegex);
+
     # Shortcut logic if we are not merging programmes.
     if (!$merge_split) {
-        return write_programme($w, { db => $r, programDetails => $programDetails, supplementalDetails => $supplementalDetails })
+        return write_programme($w, { db => $r, programDetails => $programDetails,
+                                     stationDetails => $stationDetails,
+                                     supplementalDetails => $supplementalDetails })
     }
 
     my $r2 = { db => dclone($r), # Need a deep clone otherwise all entries point to the same thing.
@@ -1488,6 +1494,7 @@ sub print_and_shuffle_programmes {
 sub write_programme {
     my ($w, $r2) = @_;
     my $programDetails = $r2->{programDetails};
+    my $stationDetails = $r2->{stationDetails};
     my $supplementalDetails = $r2->{supplementalDetails};
     my $r = $r2->{db};
       my $sID = $r->[0];
@@ -1497,11 +1504,6 @@ sub write_programme {
       # my $endTime = $startTime->clone()->add(seconds => $r->[2]);
       my $pID = $r->[3];
       my $scheduleDetails = $JSON->decode($r->[4]);
-      my $stationDetails;
-      if (defined($r->[8]))
-        {
-          $stationDetails = $JSON->decode($r->[8]);
-        }
       my $artwork;
       if (defined($r->[10]))
         {
@@ -2625,6 +2627,7 @@ sub channelWriter
           {
             $s = $JSON->decode($r->[3]);
           }
+        next if $channelRegex && $s->{name} && $s->{name} !~ $channelRegex;
 
         $writer->startTag('channel', 'id' => generateRFC2838($sID) ) ;
 
