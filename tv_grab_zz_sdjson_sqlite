@@ -185,7 +185,7 @@ my $conf;
       preferredmethod => 'allatonce',
       version => "$SCRIPT_VERSION",
       description => 'Multinational (Schedules Direct JSON web services with SQLite DB)',
-      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s passwordhash=s/],
+      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s use-category-for-keyword passwordhash=s/],
       defaults => { days => 30 },
     }
   );
@@ -1804,9 +1804,15 @@ sub write_programme {
                   }
               }
           }
+        # Some clients can not handle keywords so allow keywords to be used as categories instead.
+        my $use_cat = $opt->{'use-category-for-keyword'} // $conf->{'use-category-for-keyword'} // 0;
         foreach my $keyword (sort keys %{$keywords})
           {
-            $w->dataElement('keyword', $keyword);
+              if ($use_cat) {
+                  $w->dataElement('category', $keyword);
+              } else {
+                  $w->dataElement('keyword', $keyword);
+              }
           }
 
         if (defined($programDetails->{'duration'}))

@@ -16,6 +16,8 @@ Do not download the schedule, use database cache only.
 Do not prune the database of old schedules. Useful if running multiple times.
 * --force-download
 Erase schedules from DB and force a complete download of data.
+* --use-category-for-keyword
+Instead of outputting keyword tags, output category tags instead. Useful for programs that cannot parse keywords.
 
 Extra Supported Tags and Features
 ---------------------------------
