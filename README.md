@@ -26,6 +26,8 @@ Add year to description, for example year movie was made.
 Add season/episode information to description.
 * --update-description-with-icons
 Add icons to the description to indicate category.
+* --update-description-with-premiere
+Add indicator that an episode is brand new to the description.
 
 Extra Supported Tags and Features
 ---------------------------------
