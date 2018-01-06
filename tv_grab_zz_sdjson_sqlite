@@ -185,7 +185,7 @@ my $conf;
       preferredmethod => 'allatonce',
       version => "$SCRIPT_VERSION",
       description => 'Multinational (Schedules Direct JSON web services with SQLite DB)',
-      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s use-category-for-keyword passwordhash=s/],
+      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s use-category-for-keyword update-description-with-credits update-description-with-year update-description-with-season-episode passwordhash=s/],
       defaults => { days => 30 },
     }
   );
@@ -1491,6 +1491,133 @@ sub print_and_shuffle_programmes {
     return 1;
 }
 
+sub get_option {
+    my ($name) = @_;
+    return $opt->{$name} // $conf->{$name};
+}
+
+sub get_desc {
+    my ($desc, $actors, $year, $season_num, $episode_num) = @_;
+    return $desc unless $desc;
+    if (get_option('update-description-with-season-episode') ) {
+        my $str = "";
+        $str .= "S$season_num" if $season_num;
+        $str .= "E$episode_num" if $episode_num;
+        $desc .= " ($str)" if length $str;
+    }
+    if (get_option('update-description-with-credits') && $actors && length $actors) {
+        $desc .= "\n\nActors: $actors";
+    }
+    if (get_option('update-description-with-year') && $year) {
+        $desc = "($year). $desc";
+    }
+    return $desc;
+}
+
+
+sub get_season_episode {
+    my ($pID, $programDetails, $supplementalDetails, $scheduleDetails) = @_;
+        # Season/Episode numbering is "special" as SHows and
+        # EPisodes use slightly different interpretations of
+        # the exact same terms.
+        my $season = '';
+        my $episode = '';
+        my $part = '';
+        my $programEpisode;
+        my $programTotalEpisodes;
+        my $programSeason;
+        my $showSeason;
+        my $showEpisode;
+        my $showTotalEpisodes;
+        my $showTotalSeasons;
+        my $showingPart;
+        my $showingTotalParts;
+        my $thetvdbSeriesID;
+        my $thetvdbEpisodeID;
+        my $thetvdbSeason;
+        my $thetvdbEpisode;
+        if (defined($supplementalDetails->{'metadata'}))
+          {
+            foreach my $meta(@{$supplementalDetails->{'metadata'}})
+              {
+                last if ((!defined($supplementalDetails->{'programID'})) ||
+                         ('SH' ne substr($supplementalDetails->{'programID'}, 0, 2)));
+                # We only support Gracenote season/episode metadata
+                # and TheTVDB series/episode link.
+                if (defined($meta->{'Gracenote'}))
+                  {
+                    $showSeason = $meta->{'Gracenote'}->{'season'};
+                    $showEpisode = $meta->{'Gracenote'}->{'episode'};
+                    $showTotalSeasons = $meta->{'Gracenote'}->{'totalSeasons'};
+                    $showTotalEpisodes = $meta->{'Gracenote'}->{'totalEpisodes'};
+                  } elsif (defined($meta->{'TheTVDB'}))
+                  {
+                      $thetvdbSeriesID = $meta->{'TheTVDB'}->{seriesID};
+                      $thetvdbEpisodeID = $meta->{'TheTVDB'}->{episodeID};
+                  }
+              }
+          }
+        if (defined($programDetails->{'metadata'}))
+          {
+            foreach my $meta(@{$programDetails->{'metadata'}})
+              {
+                # We only support Gracenote season/episode metadata
+                # and TheTVDB series/episode link.
+                if (defined($meta->{'Gracenote'}))
+                  {
+                    if (substr($pID, 0, 2) eq 'SH')
+                      {
+                        $showSeason = $meta->{'Gracenote'}->{'season'};
+                        $showEpisode = $meta->{'Gracenote'}->{'episode'};
+                        $showTotalSeasons = $meta->{'Gracenote'}->{'totalSeasons'};
+                        $showTotalEpisodes = $meta->{'Gracenote'}->{'totalEpisodes'};
+                      }
+                    else
+                      {
+                        $programSeason = $meta->{'Gracenote'}->{'season'};
+                        $programEpisode = $meta->{'Gracenote'}->{'episode'};
+                        $programTotalEpisodes = $meta->{'Gracenote'}->{'totalEpisodes'};
+                      }
+                  } elsif (defined($meta->{'TheTVDB'}))
+                  {
+                      $thetvdbSeriesID = $meta->{'TheTVDB'}->{seriesID};
+                      $thetvdbEpisodeID = $meta->{'TheTVDB'}->{episodeID};
+                      $thetvdbSeason = $meta->{'TheTVDB'}->{season};
+                      $thetvdbEpisode = $meta->{'TheTVDB'}->{episode};
+                  }
+              }
+          }
+        if (defined($scheduleDetails->{'multipart'}))
+          {
+            $showingPart = $scheduleDetails->{'multipart'}->{'partNumber'};
+            $showingTotalParts = $scheduleDetails->{'multipart'}->{'totalParts'};
+          }
+        $programSeason = $showSeason if (!defined($programSeason));
+        $showTotalSeasons = undef if (exists($GRABBER_FIXUPS->{'NO_XMLTV_NS_TOTAL_SEASONS'}));
+        # Prefer TVDB season/episode if it is available since external
+        # metadata lookups will fail otherwise. For example, CSI:Miami
+        # S3E25 on Gracenote is S3E24 on TVDB and on other metadata
+        # systems due to Gracenote having a gap for an unaired S3E17.
+        # But we only use the TVDB if it differs since Gracenote often
+        # has total number of episodes/seasons.
+        my $season_num;
+        my $episode_num;
+        if (($thetvdbSeason  && $programSeason  && ($thetvdbSeason  != $programSeason)) ||
+            ($thetvdbEpisode && $programEpisode && ($thetvdbEpisode != $programEpisode))) {
+            $season = generateXMLTV_NS($thetvdbSeason, undef);
+            $episode = generateXMLTV_NS($thetvdbEpisode, undef);
+            $season_num = $thetvdbSeason;
+            $episode_num = $thetvdbEpisode;
+        } else {
+            $season = generateXMLTV_NS($programSeason, $showTotalSeasons);
+            $episode = generateXMLTV_NS($programEpisode, $programTotalEpisodes);
+            $season_num = $programSeason;
+            $episode_num = $programEpisode;
+        }
+        $part = generateXMLTV_NS($showingPart, $showingTotalParts);
+        return ($season_num, $episode_num, $season, $episode, $part, $thetvdbSeriesID, $thetvdbEpisodeID);
+}
+
 sub write_programme {
     my ($w, $r2) = @_;
     my $programDetails = $r2->{programDetails};
@@ -1528,49 +1655,7 @@ sub write_programme {
           {
             $w->dataElement('sub-title', $supplementalDetails->{'episodeTitle150'});
           }
-
-        # Choose the "best" (i.e. longer) description if available
-        if (defined($programDetails->{'descriptions'}->{'description1000'}))
-          {
-            foreach my $d(@{$programDetails->{'descriptions'}->{'description1000'}})
-              {
-                my $lang = $d->{'descriptionLanguage'};
-                my $desc = $d->{'description'};
-                next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', $desc, 'lang' => $lang);
-              }
-          }
-        elsif (defined($programDetails->{'descriptions'}->{'description100'}))
-          {
-            foreach my $d(@{$programDetails->{'descriptions'}->{'description100'}})
-              {
-                my $lang = $d->{'descriptionLanguage'};
-                my $desc = $d->{'description'};
-                next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', $desc, 'lang' => $lang);
-              }
-          }
-        elsif (defined($supplementalDetails->{'descriptions'}->{'description1000'}))
-          {
-            foreach my $d(@{$supplementalDetails->{'descriptions'}->{'description1000'}})
-              {
-                my $lang = $d->{'descriptionLanguage'};
-                my $desc = $d->{'description'};
-                next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', $desc, 'lang' => $lang);
-              }
-          }
-        elsif (defined($supplementalDetails->{'descriptions'}->{'description100'}))
-          {
-            foreach my $d(@{$supplementalDetails->{'descriptions'}->{'description100'}})
-              {
-                my $lang = $d->{'descriptionLanguage'};
-                my $desc = $d->{'description'};
-                next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', $desc, 'lang' => $lang);
-              }
-          }
-
+        my $w2 = XML::Writer->new(OUTPUT => 'self');
         # XMLTV roles for this program
         my $roles =
           {
@@ -1621,7 +1706,8 @@ sub write_programme {
                 addRole($roles, $crewMap->{$crew->{'role'}}, $crew->{'name'}, '10' . $crew->{'billingOrder'}, undef);
               }
           }
-        $w->startTag('credits');
+        $w2->startTag('credits');
+        my @actors;
           foreach my $role('director', 'actor', 'writer', 'adapter', 'producer', 'composer', 'editor', 'presenter', 'commentator', 'guest')
             {
               foreach my $person(sort {$roles->{$role}->{$a}->{'order'} <=> $roles->{$role}->{$b}->{'order'}} (keys %{$roles->{$role}}))
@@ -1629,28 +1715,71 @@ sub write_programme {
                   # per dtd, only actors can have roles (I respectfully disagree, as guests can have roles, but the dtd must be obeyed)
                   if ((0 == scalar(@{$roles->{$role}->{$person}->{'character'}})) || ($role ne 'actor'))
                     {
-                      $w->dataElement($role, $person);
+                      $w2->dataElement($role, $person);
+                      push @actors, $person if $role eq 'actor';
                     }
                   else
                     {
                       foreach my $character(@{$roles->{$role}->{$person}->{'character'}})
                         {
-                          $w->dataElement($role, $person, 'role' => $character);
+                          $w2->dataElement($role, $person, 'role' => $character);
+                          push @actors, $person;
                         }
                     }
                 }
             }
-        $w->endTag('credits');
+        my $actors = join ', ', @actors;
+        $w2->endTag('credits');
 
         # Only movies (likely) have a date
-        if (defined($programDetails->{'movie'}->{'year'}))
+        my $year = $programDetails->{'movie'}->{'year'} //
+          $supplementalDetails->{'movie'}->{'year'};
+
+        my ($season_num, $episode_num, $season_xmltvns, $episode_xmltvns, $part_xmltvns, $thetvdbSeriesID, $thetvdbEpisodeID) = get_season_episode($pID, $programDetails, $supplementalDetails, $scheduleDetails);
+
+
+        # Choose the "best" (i.e. longer) description if available
+        if (defined($programDetails->{'descriptions'}->{'description1000'}))
           {
-            $w->dataElement('date', $programDetails->{'movie'}->{'year'});
+            foreach my $d(@{$programDetails->{'descriptions'}->{'description1000'}})
+              {
+                my $lang = $d->{'descriptionLanguage'};
+                my $desc = $d->{'description'};
+                next if ((!defined($lang) || (!defined($desc))));
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num), 'lang' => $lang);
+              }
           }
-        elsif (defined($supplementalDetails->{'movie'}->{'year'}))
+        elsif (defined($programDetails->{'descriptions'}->{'description100'}))
           {
-            $w->dataElement('date', $supplementalDetails->{'movie'}->{'year'});
+            foreach my $d(@{$programDetails->{'descriptions'}->{'description100'}})
+              {
+                my $lang = $d->{'descriptionLanguage'};
+                my $desc = $d->{'description'};
+                next if ((!defined($lang) || (!defined($desc))));
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num), 'lang' => $lang);
+              }
           }
+        elsif (defined($supplementalDetails->{'descriptions'}->{'description1000'}))
+          {
+            foreach my $d(@{$supplementalDetails->{'descriptions'}->{'description1000'}})
+              {
+                my $lang = $d->{'descriptionLanguage'};
+                my $desc = $d->{'description'};
+                next if ((!defined($lang) || (!defined($desc))));
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num), 'lang' => $lang);
+              }
+          }
+        elsif (defined($supplementalDetails->{'descriptions'}->{'description100'}))
+          {
+            foreach my $d(@{$supplementalDetails->{'descriptions'}->{'description100'}})
+              {
+                my $lang = $d->{'descriptionLanguage'};
+                my $desc = $d->{'description'};
+                next if ((!defined($lang) || (!defined($desc))));
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num), 'lang' => $lang);
+              }
+          }
+        $w->dataElement('date', $year) if $year;
 
         if (defined($conf->{'mythtv-categories'}->[0]) &&
             ($conf->{'mythtv-categories'}->[0] eq 'enabled'))
@@ -1927,102 +2056,9 @@ sub write_programme {
         #  {
         #    $w->dataElement('episode-num', "resourceid/$supplementalDetails->{'resourceID'}", 'system' => 'schedulesdirect.org');
         #  }
-
-        # Season/Episode numbering is "special" as SHows and
-        # EPisodes use slightly different interpretations of
-        # the exact same terms.
-        my $season = '';
-        my $episode = '';
-        my $part = '';
-        my $programEpisode;
-        my $programTotalEpisodes;
-        my $programSeason;
-        my $showSeason;
-        my $showEpisode;
-        my $showTotalEpisodes;
-        my $showTotalSeasons;
-        my $showingPart;
-        my $showingTotalParts;
-        my $thetvdbSeriesID;
-        my $thetvdbEpisodeID;
-        my $thetvdbSeason;
-        my $thetvdbEpisode;
-        if (defined($supplementalDetails->{'metadata'}))
+        if (($season_xmltvns ne '') || ($episode_xmltvns ne '') || ($part_xmltvns ne ''))
           {
-            foreach my $meta(@{$supplementalDetails->{'metadata'}})
-              {
-                last if ((!defined($supplementalDetails->{'programID'})) ||
-                         ('SH' ne substr($supplementalDetails->{'programID'}, 0, 2)));
-                # We only support Gracenote season/episode metadata
-                # and TheTVDB series/episode link.
-                if (defined($meta->{'Gracenote'}))
-                  {
-                    $showSeason = $meta->{'Gracenote'}->{'season'};
-                    $showEpisode = $meta->{'Gracenote'}->{'episode'};
-                    $showTotalSeasons = $meta->{'Gracenote'}->{'totalSeasons'};
-                    $showTotalEpisodes = $meta->{'Gracenote'}->{'totalEpisodes'};
-                  } elsif (defined($meta->{'TheTVDB'}))
-                  {
-                      $thetvdbSeriesID = $meta->{'TheTVDB'}->{seriesID};
-                      $thetvdbEpisodeID = $meta->{'TheTVDB'}->{episodeID};
-                  }
-              }
-          }
-        if (defined($programDetails->{'metadata'}))
-          {
-            foreach my $meta(@{$programDetails->{'metadata'}})
-              {
-                # We only support Gracenote season/episode metadata
-                # and TheTVDB series/episode link.
-                if (defined($meta->{'Gracenote'}))
-                  {
-                    if (substr($pID, 0, 2) eq 'SH')
-                      {
-                        $showSeason = $meta->{'Gracenote'}->{'season'};
-                        $showEpisode = $meta->{'Gracenote'}->{'episode'};
-                        $showTotalSeasons = $meta->{'Gracenote'}->{'totalSeasons'};
-                        $showTotalEpisodes = $meta->{'Gracenote'}->{'totalEpisodes'};
-                      }
-                    else
-                      {
-                        $programSeason = $meta->{'Gracenote'}->{'season'};
-                        $programEpisode = $meta->{'Gracenote'}->{'episode'};
-                        $programTotalEpisodes = $meta->{'Gracenote'}->{'totalEpisodes'};
-                      }
-                  } elsif (defined($meta->{'TheTVDB'}))
-                  {
-                      $thetvdbSeriesID = $meta->{'TheTVDB'}->{seriesID};
-                      $thetvdbEpisodeID = $meta->{'TheTVDB'}->{episodeID};
-                      $thetvdbSeason = $meta->{'TheTVDB'}->{season};
-                      $thetvdbEpisode = $meta->{'TheTVDB'}->{episode};
-                  }
-              }
-          }
-        if (defined($scheduleDetails->{'multipart'}))
-          {
-            $showingPart = $scheduleDetails->{'multipart'}->{'partNumber'};
-            $showingTotalParts = $scheduleDetails->{'multipart'}->{'totalParts'};
-          }
-        $programSeason = $showSeason if (!defined($programSeason));
-        $showTotalSeasons = undef if (exists($GRABBER_FIXUPS->{'NO_XMLTV_NS_TOTAL_SEASONS'}));
-        # Prefer TVDB season/episode if it is available since external
-        # metadata lookups will fail otherwise. For example, CSI:Miami
-        # S3E25 on Gracenote is S3E24 on TVDB and on other metadata
-        # systems due to Gracenote having a gap for an unaired S3E17.
-        # But we only use the TVDB if it differs since Gracenote often
-        # has total number of episodes/seasons.
-        if (($thetvdbSeason  && $programSeason  && ($thetvdbSeason  != $programSeason)) ||
-            ($thetvdbEpisode && $programEpisode && ($thetvdbEpisode != $programEpisode))) {
-            $season = generateXMLTV_NS($thetvdbSeason, undef);
-            $episode = generateXMLTV_NS($thetvdbEpisode, undef);
-        } else {
-            $season = generateXMLTV_NS($programSeason, $showTotalSeasons);
-            $episode = generateXMLTV_NS($programEpisode, $programTotalEpisodes);
-        }
-        $part = generateXMLTV_NS($showingPart, $showingTotalParts);
-        if (($season ne '') || ($episode ne '') || ($part ne ''))
-          {
-            $w->dataElement('episode-num', " $season . $episode . $part ", 'system' => 'xmltv_ns');
+            $w->dataElement('episode-num', " $season_xmltvns . $episode_xmltvns . $part_xmltvns ", 'system' => 'xmltv_ns');
           }
         # Format is series/id or episode/id.
         # http://xmltv.cvs.sourceforge.net/viewvc/xmltv/xmltv/xmltv.dtd?r1=1.45&r2=1.46
@@ -2275,7 +2311,6 @@ sub write_programme {
               $w->dataElement('value', $starRatings->{$body});
             $w->endTag('star-rating');
           }
-
       $w->endTag('programme');
     }
     return 1;
