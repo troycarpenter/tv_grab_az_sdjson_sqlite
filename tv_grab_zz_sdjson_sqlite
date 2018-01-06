@@ -1587,6 +1587,12 @@ sub get_desc {
     if (get_option('update-description-with-year') && $year) {
         $desc = "($year). $desc";
     }
+    if (get_option('update-description-with-season-episode') ) {
+        my $str = "";
+        $str .= "S$season_num" if $season_num;
+        $str .= "E$episode_num" if $episode_num;
+        $desc = "$str. $desc" if length $str;
+    }
     if (get_option('update-description-with-icons')) {
         # We use maps since several categories can map to same icon.
         my %icons_major;
@@ -1604,12 +1610,6 @@ sub get_desc {
         my $icons_major = join "", keys %icons_major;
         my $icons_minor = join "", keys %icons_minor;
         $desc = "$icons_major$icons_minor\n$desc" if $icons_major or $icons_minor;
-    }
-    if (get_option('update-description-with-season-episode') ) {
-        my $str = "";
-        $str .= "S$season_num" if $season_num;
-        $str .= "E$episode_num" if $episode_num;
-        $desc .= " ($str)" if length $str;
     }
     if (get_option('update-description-with-credits') && $actors && length $actors) {
         $desc .= "\n\nActors: $actors";
