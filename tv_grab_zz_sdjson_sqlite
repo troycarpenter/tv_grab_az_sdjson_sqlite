@@ -172,6 +172,91 @@ my $passwordHash;
 my $opt;
 my $conf;
 
+my %catmap_major = (
+                    movie => "\N{CLAPPER BOARD}",
+                    news => "\N{NEWSPAPER}",
+                    radio => "\N{RADIO}",
+                    series => "\N{TELEVISION}",
+                    sports => "\N{SPORTS MEDAL}",
+                    'sports non-event' => "\N{SPORTS MEDAL}",
+                   );
+my %catmap_minor = (
+                    action => "\N{COLLISION SYMBOL}",
+                    'adults only' => "\N{NO ONE UNDER EIGHTEEN SYMBOL}",
+                    adventure => "\N{BOW AND ARROW}",
+                    animals => "\N{PAW PRINTS}",
+                    animated => "\N{PENCIL}",
+                    art => "\N{ARTIST PALETTE}",
+                    auction => "\N{MONEY WITH WINGS}",
+                    'auto racing' => "\N{RACING CAR}",
+                    auto => "\N{AUTOMOBILE}",
+                    baseball => "\N{BASEBALL}",
+                    basketball => "\N{BASKETBALL AND HOOP}",
+                    boxing => "\N{BOXING GLOVE}",
+                    'bus./financial' => "\N{CHART WITH UPWARDS TREND}",
+                    children => "\N{BABY}",
+                    comedy => "\N{FACE WITH TEARS OF JOY}",
+                    computers => "\N{PERSONAL COMPUTER}",
+                    community => "\N{FAMILY}",
+                    cooking => "\N{COOKING}",
+                    'crime drama' => "\N{POLICE OFFICER}",
+                    dance => "\N{DANCER}",
+                    educational => "\N{GRADUATION CAP}",
+                    fantasy => "\N{UNICORN FACE}",
+                    fashion => "\N{HIGH-HEELED SHOE}",
+                    'figure skating' => "\N{ICE SKATE}",
+                    fishing => "\N{FISHING POLE AND FISH}",
+                    football => "\N{AMERICAN FOOTBALL}", # American Football (not soccer)
+                    'game show' => "\N{GAME DIE}",
+                    gymnastics => "\N{PERSON DOING CARTWHEEL}",
+                    history => "\N{CASTLE}",
+                    holiday => "\N{AIRPLANE}",
+                    'home improvement' => "\N{CONSTRUCTION WORKER}",
+                    horror => "\N{SKULL}",
+                    horse => "\N{HORSE FACE}",
+                    'house/garden' => "\N{HOUSE WITH GARDEN}",
+                    interview => "\N{SPEAKING HEAD IN SILHOUETTE}",
+                    law => "\N{POLICE OFFICER}",
+                    'martial arts' => "\N{MARTIAL ARTS UNIFORM}",
+                    medical => "\N{AMBULANCE}",
+                    military => "\N{MILITARY MEDAL}",
+                    miniseries => "\N{LINK SYMBOL}",
+                    'mixed martial arts' => "\N{MARTIAL ARTS UNIFORM}",
+                    motorcycle => "\N{RACING MOTORCYCLE}",
+                    music => "\N{MUSICAL NOTE}",
+                    musical => "\N{MUSICAL NOTE}",
+                    mystery => "\N{LEFT-POINTING MAGNIFYING GLASS}",
+                    nature => "\N{ELEPHANT}",
+                    paranormal => "\N{GHOST}",
+                    poker => "\N{BLACK SPADE SUIT}",
+                    politics => "\N{BALLOT BOX WITH BALLOT}",
+                    'pro wrestling' => "\N{WRESTLERS}",
+                    reality => "\N{SELFIE}",
+                    religious => "\N{PLACE OF WORSHIP}",
+                    romance => "\N{BEATING HEART}",
+                    'romantic comedy' => "\N{BEATING HEART}",
+                    'science fiction' => "\N{EXTRATERRESTRIAL ALIEN}",
+                    science => "\N{MICROSCOPE}",
+                    shopping => "\N{SHOPPING TROLLEY}",
+                    sitcom=> "\N{GRINNING FACE}",
+                    skiing => "\N{SKIER}",
+                    soap => "\N{COUCH AND LAMP}",
+                    soccer => "\N{SOCCER BALL}",
+                    'sports talk' => "\N{SPEAKING HEAD IN SILHOUETTE}",
+                    spy=> "\N{SLEUTH OR SPY}",
+                    standup => "\N{MICROPHONE}",
+                    swimming => "\N{SWIMMER}",
+                    talk => "\N{SPEAKING HEAD IN SILHOUETTE}",
+                    technology => "\N{PERSONAL COMPUTER}",
+                    tennis => "\N{TENNIS RACQUET AND BALL}",
+                    theater => "\N{PERFORMING ARTS}",
+                    travel => "\N{AIRPLANE}",
+                    war => "\N{MILITARY MEDAL}",
+                    weather => "\N{SUN BEHIND CLOUD}",
+                    weightlifting => "\N{WEIGHT LIFTER}",
+                    western => "\N{CACTUS}",
+                   );
+
 ( $opt, $conf ) = ParseOptions
   (
     {
@@ -185,7 +270,7 @@ my $conf;
       preferredmethod => 'allatonce',
       version => "$SCRIPT_VERSION",
       description => 'Multinational (Schedules Direct JSON web services with SQLite DB)',
-      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s use-category-for-keyword update-description-with-credits update-description-with-year update-description-with-season-episode passwordhash=s/],
+      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s use-category-for-keyword update-description-with-credits update-description-with-year update-description-with-season-episode update-description-with-icons passwordhash=s/],
       defaults => { days => 30 },
     }
   );
@@ -1497,8 +1582,29 @@ sub get_option {
 }
 
 sub get_desc {
-    my ($desc, $actors, $year, $season_num, $episode_num) = @_;
+    my ($desc, $actors, $year, $season_num, $episode_num, $categories) = @_;
     return $desc unless $desc;
+    if (get_option('update-description-with-year') && $year) {
+        $desc = "($year). $desc";
+    }
+    if (get_option('update-description-with-icons')) {
+        # We use maps since several categories can map to same icon.
+        my %icons_major;
+        my %icons_minor;
+        foreach my $category (sort {$categories->{$a} <=> $categories->{$b}} (keys %{$categories})) {
+            $category = lc $category;
+            my $icon = $catmap_major{$category};
+            if ($icon) {
+                $icons_major{$icon} = 1;
+            } else {
+                $icon = $catmap_minor{$category};
+                $icons_minor{$icon} = 1 if $icon;
+            }
+        }
+        my $icons_major = join "", keys %icons_major;
+        my $icons_minor = join "", keys %icons_minor;
+        $desc = "$icons_major$icons_minor\n$desc" if $icons_major or $icons_minor;
+    }
     if (get_option('update-description-with-season-episode') ) {
         my $str = "";
         $str .= "S$season_num" if $season_num;
@@ -1507,9 +1613,6 @@ sub get_desc {
     }
     if (get_option('update-description-with-credits') && $actors && length $actors) {
         $desc .= "\n\nActors: $actors";
-    }
-    if (get_option('update-description-with-year') && $year) {
-        $desc = "($year). $desc";
     }
     return $desc;
 }
@@ -1737,50 +1840,7 @@ sub write_programme {
 
         my ($season_num, $episode_num, $season_xmltvns, $episode_xmltvns, $part_xmltvns, $thetvdbSeriesID, $thetvdbEpisodeID) = get_season_episode($pID, $programDetails, $supplementalDetails, $scheduleDetails);
 
-
-        # Choose the "best" (i.e. longer) description if available
-        if (defined($programDetails->{'descriptions'}->{'description1000'}))
-          {
-            foreach my $d(@{$programDetails->{'descriptions'}->{'description1000'}})
-              {
-                my $lang = $d->{'descriptionLanguage'};
-                my $desc = $d->{'description'};
-                next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num), 'lang' => $lang);
-              }
-          }
-        elsif (defined($programDetails->{'descriptions'}->{'description100'}))
-          {
-            foreach my $d(@{$programDetails->{'descriptions'}->{'description100'}})
-              {
-                my $lang = $d->{'descriptionLanguage'};
-                my $desc = $d->{'description'};
-                next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num), 'lang' => $lang);
-              }
-          }
-        elsif (defined($supplementalDetails->{'descriptions'}->{'description1000'}))
-          {
-            foreach my $d(@{$supplementalDetails->{'descriptions'}->{'description1000'}})
-              {
-                my $lang = $d->{'descriptionLanguage'};
-                my $desc = $d->{'description'};
-                next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num), 'lang' => $lang);
-              }
-          }
-        elsif (defined($supplementalDetails->{'descriptions'}->{'description100'}))
-          {
-            foreach my $d(@{$supplementalDetails->{'descriptions'}->{'description100'}})
-              {
-                my $lang = $d->{'descriptionLanguage'};
-                my $desc = $d->{'description'};
-                next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num), 'lang' => $lang);
-              }
-          }
-        $w->dataElement('date', $year) if $year;
-
+        my $mythtv_category;
         if (defined($conf->{'mythtv-categories'}->[0]) &&
             ($conf->{'mythtv-categories'}->[0] eq 'enabled'))
           {
@@ -1800,15 +1860,15 @@ sub write_programme {
                 my $entityType = $programDetails->{'entityType'};
                 if ($entityType eq 'Movie')
                   {
-                    $w->dataElement('category', 'movie');
+                    $mythtv_category = 'movie';
                   }
                 elsif ($entityType eq 'Sports')
                   {
-                    $w->dataElement('category', 'sports');
+                    $mythtv_category = 'sports';
                   }
                 elsif ($entityType eq 'Episode')
                   {
-                    $w->dataElement('category', 'series');
+                    $mythtv_category = 'series';
                   }
                 else   # Should be Show
                   {
@@ -1825,27 +1885,27 @@ sub write_programme {
                         ($showType eq 'Short Film') ||
                         ($showType eq 'TV Movie'))
                       {
-                        $w->dataElement('category', 'movie');
+                        $mythtv_category = 'movie';
                       }
                     elsif (($showType eq 'Sports event') ||
                            ($showType eq 'Sports non-event'))
                       {
-                        $w->dataElement('category', 'sports');
+                        $mythtv_category = 'sports';
                       }
                     elsif (($showType eq 'Series') ||
                            ($showType eq 'Miniseries'))
                       {
-                        $w->dataElement('category', 'series');
+                        $mythtv_category = 'series';
                       }
                     else
                       {
                         if ($radioStation)
                           {
-                            $w->dataElement('category', 'radio');
+                            $mythtv_category = 'radio';
                           }
                         else
                           {
-                            $w->dataElement('category', 'tvshow');
+                            $mythtv_category = 'tvshow';
                           }
                       }
                   }
@@ -1854,11 +1914,11 @@ sub write_programme {
               {
                 if ($radioStation)
                   {
-                    $w->dataElement('category', 'radio');
+                    $mythtv_category = 'radio';
                   }
                 else
                   {
-                    $w->dataElement('category', 'tvshow');
+                    $mythtv_category = 'tvshow';
                   }
               }
           }
@@ -1900,7 +1960,51 @@ sub write_programme {
         if (defined($supplementalDetails->{'entityType'}))
           {
             $categories->{$supplementalDetails->{'entityType'}} = $categorynum++ if (!defined($categories->{$supplementalDetails->{'entityType'}}));
+        }
+
+        # Choose the "best" (i.e. longer) description if available
+        if (defined($programDetails->{'descriptions'}->{'description1000'}))
+          {
+            foreach my $d(@{$programDetails->{'descriptions'}->{'description1000'}})
+              {
+                my $lang = $d->{'descriptionLanguage'};
+                my $desc = $d->{'description'};
+                next if ((!defined($lang) || (!defined($desc))));
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories), 'lang' => $lang);
+              }
           }
+        elsif (defined($programDetails->{'descriptions'}->{'description100'}))
+          {
+            foreach my $d(@{$programDetails->{'descriptions'}->{'description100'}})
+              {
+                my $lang = $d->{'descriptionLanguage'};
+                my $desc = $d->{'description'};
+                next if ((!defined($lang) || (!defined($desc))));
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories), 'lang' => $lang);
+              }
+          }
+        elsif (defined($supplementalDetails->{'descriptions'}->{'description1000'}))
+          {
+            foreach my $d(@{$supplementalDetails->{'descriptions'}->{'description1000'}})
+              {
+                my $lang = $d->{'descriptionLanguage'};
+                my $desc = $d->{'description'};
+                next if ((!defined($lang) || (!defined($desc))));
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories), 'lang' => $lang);
+              }
+          }
+        elsif (defined($supplementalDetails->{'descriptions'}->{'description100'}))
+          {
+            foreach my $d(@{$supplementalDetails->{'descriptions'}->{'description100'}})
+              {
+                my $lang = $d->{'descriptionLanguage'};
+                my $desc = $d->{'description'};
+                next if ((!defined($lang) || (!defined($desc))));
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories), 'lang' => $lang);
+              }
+          }
+	$w->dataElement('date', $year) if $year;
+        $w->dataElement('category', $mythtv_category) if $mythtv_category;
         foreach my $category (sort {$categories->{$a} <=> $categories->{$b}} (keys %{$categories}))
           {
             $w->dataElement('category', $category);
