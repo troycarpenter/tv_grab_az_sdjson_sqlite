@@ -270,7 +270,7 @@ my %catmap_minor = (
       preferredmethod => 'allatonce',
       version => "$SCRIPT_VERSION",
       description => 'Multinational (Schedules Direct JSON web services with SQLite DB)',
-      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s use-category-for-keyword update-description-with-credits update-description-with-year update-description-with-season-episode update-description-with-icons update-description-with-icons-basic update-description-with-premiere update-description-with-live passwordhash=s/],
+      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s use-category-for-keyword update-description-with-credits update-description-with-year update-description-with-season-episode update-description-with-icons update-description-with-icons-basic update-description-with-premiere update-description-with-live update-description-with-advisory passwordhash=s/],
       defaults => { days => 30 },
     }
   );
@@ -1582,7 +1582,7 @@ sub get_option {
 }
 
 sub get_desc {
-    my ($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails) = @_;
+    my ($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories) = @_;
     return $desc unless $desc;
     if (get_option('update-description-with-year') && $year) {
         $desc = "($year). $desc";
@@ -1635,6 +1635,14 @@ sub get_desc {
         my $icons = $icons_major . $icons_minor;
         $desc = "$icons\n$desc" if length $icons;
     }
+
+    if (get_option('update-description-with-advisory')) {
+        my @advisory;
+        push @advisory, $_ foreach (sort keys %{$advisories});
+        my $advisory = join ", ", @advisory;
+        $desc = "$desc\n\nAdvisory: $advisory" if $advisory;
+    }
+
     if (get_option('update-description-with-credits') && $actors && length $actors) {
         $desc .= "\n\nActors: $actors";
     }
@@ -1743,6 +1751,27 @@ sub get_season_episode {
         }
         $part = generateXMLTV_NS($showingPart, $showingTotalParts);
         return ($season_num, $episode_num, $season, $episode, $part, $thetvdbSeriesID, $thetvdbEpisodeID);
+}
+
+sub get_content_advisory {
+    my ($programDetails, $supplementalDetails) = @_;
+    # XMLTV advisories are arbitrary values.  Collect from program and supplemental
+    my $advisories = {};
+    if (defined($supplementalDetails->{'contentAdvisory'}))
+      {
+          foreach my $advisory(@{$supplementalDetails->{'contentAdvisory'}})
+            {
+                $advisories->{$advisory} = 1;
+            }
+      }
+    if (defined($programDetails->{'contentAdvisory'}))
+      {
+          foreach my $advisory(@{$programDetails->{'contentAdvisory'}})
+            {
+                $advisories->{$advisory} = 1;
+            }
+      }
+    return $advisories;
 }
 
 sub write_programme {
@@ -1863,6 +1892,7 @@ sub write_programme {
           $supplementalDetails->{'movie'}->{'year'};
 
         my ($season_num, $episode_num, $season_xmltvns, $episode_xmltvns, $part_xmltvns, $thetvdbSeriesID, $thetvdbEpisodeID) = get_season_episode($pID, $programDetails, $supplementalDetails, $scheduleDetails);
+        my $advisories = get_content_advisory($programDetails, $supplementalDetails);
 
         my $mythtv_category;
         if (defined($conf->{'mythtv-categories'}->[0]) &&
@@ -1994,7 +2024,7 @@ sub write_programme {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories), 'lang' => $lang);
               }
           }
         elsif (defined($programDetails->{'descriptions'}->{'description100'}))
@@ -2004,7 +2034,7 @@ sub write_programme {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories), 'lang' => $lang);
               }
           }
         elsif (defined($supplementalDetails->{'descriptions'}->{'description1000'}))
@@ -2014,7 +2044,7 @@ sub write_programme {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories), 'lang' => $lang);
               }
           }
         elsif (defined($supplementalDetails->{'descriptions'}->{'description100'}))
@@ -2024,7 +2054,7 @@ sub write_programme {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories), 'lang' => $lang);
               }
           }
 	$w->dataElement('date', $year) if $year;
@@ -2359,22 +2389,6 @@ sub write_programme {
             $w->endTag('rating');
           }
 
-        # XMLTV advisories are arbitrary values.  Collect from program and supplemental
-        my $advisories = {};
-        if (defined($supplementalDetails->{'contentAdvisory'}))
-          {
-            foreach my $advisory(@{$supplementalDetails->{'contentAdvisory'}})
-              {
-                $advisories->{$advisory} = 1;
-              }
-          }
-        if (defined($programDetails->{'contentAdvisory'}))
-          {
-            foreach my $advisory(@{$programDetails->{'contentAdvisory'}})
-              {
-                $advisories->{$advisory} = 1;
-              }
-          }
         foreach my $advisory(sort keys %{$advisories})
           {
             $w->startTag('rating', 'system' => 'advisory');

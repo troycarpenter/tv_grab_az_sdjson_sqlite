@@ -33,6 +33,8 @@ Similar to --update-description-with-icons but only include icons that fit in to
 Add indicator that an episode is brand new to the description.
 * --update-description-with-live
 Add indicator that an episode is live to the description.
+* --update-description-with-advisory
+Add content advisories (such as adult language) to description.
 
 Extra Supported Tags and Features
 ---------------------------------
