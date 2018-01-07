@@ -1613,7 +1613,8 @@ sub get_desc {
         }
         my $icons_major = join "", keys %icons_major;
         my $icons_minor = join "", keys %icons_minor;
-        $desc = "$icons_major$icons_minor\n$desc" if $icons_major or $icons_minor;
+        my $icons = $icons_major . $icons_minor;
+        $desc = "$icons\n$desc" if length $icons;
     }
     if (get_option('update-description-with-credits') && $actors && length $actors) {
         $desc .= "\n\nActors: $actors";
