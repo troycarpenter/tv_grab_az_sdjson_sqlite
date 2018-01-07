@@ -27,6 +27,8 @@ Add season/episode information to description.
 * --update-description-with-icons
 Add icons to the description to indicate category.
 Note that some databases (such as MySQL/MariaDB) have their own idea of utf-8 which defaults to only three-bytes not four-bytes (which they call utf8mb4), so they cannot store all icons correctly.
+* --update-description-with-icons-basic
+Similar to --update-description-with-icons but only include icons that fit in to basic character set so supported by older databases.
 * --update-description-with-premiere
 Add indicator that an episode is brand new to the description.
 
