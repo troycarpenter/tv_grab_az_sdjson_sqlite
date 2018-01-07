@@ -270,7 +270,7 @@ my %catmap_minor = (
       preferredmethod => 'allatonce',
       version => "$SCRIPT_VERSION",
       description => 'Multinational (Schedules Direct JSON web services with SQLite DB)',
-      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s use-category-for-keyword update-description-with-credits update-description-with-year update-description-with-season-episode update-description-with-icons update-description-with-icons-basic update-description-with-premiere passwordhash=s/],
+      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s use-category-for-keyword update-description-with-credits update-description-with-year update-description-with-season-episode update-description-with-icons update-description-with-icons-basic update-description-with-premiere update-description-with-live passwordhash=s/],
       defaults => { days => 30 },
     }
   );
@@ -1593,10 +1593,25 @@ sub get_desc {
         $str .= "E$episode_num" if $episode_num;
         $desc = "$str. $desc" if length $str;
     }
+    my @prog_details;
     if (get_option('update-description-with-premiere')) {
         my $is_new = $scheduleDetails->{premiere} // $scheduleDetails->{new};
-        $desc = "NEW:\n$desc" if $is_new;
+        push @prog_details, "NEW" if $is_new;
     }
+    if (get_option('update-description-with-live')) {
+        my $is_live = $scheduleDetails->{liveTapeDelay} && $scheduleDetails->{liveTapeDelay} eq 'Live';
+        push @prog_details, "LIVE" if $is_live;
+    }
+
+    if (@prog_details) {
+        my $prog_details = join ":", @prog_details;
+        # We output ":NEW:", ":NEW:LIVE:", etc. We use colons around
+        # the name so that it is easy to search for by the user
+        # whereas "NEW" (without colons) might not be easy to find
+        # with case-insensitive searches.
+        $desc = ":$prog_details:\n$desc";
+    }
+
     if (get_option('update-description-with-icons') or get_option('update-description-with-icons-basic')) {
         # Some databases default to only a broken utf-8 which only
         # handles basic multiplane characters, not four-byte

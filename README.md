@@ -31,6 +31,8 @@ Note that some databases (such as MySQL/MariaDB) have their own idea of utf-8 wh
 Similar to --update-description-with-icons but only include icons that fit in to basic character set so supported by older databases.
 * --update-description-with-premiere
 Add indicator that an episode is brand new to the description.
+* --update-description-with-live
+Add indicator that an episode is live to the description.
 
 Extra Supported Tags and Features
 ---------------------------------
