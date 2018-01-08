@@ -270,7 +270,7 @@ my %catmap_minor = (
       preferredmethod => 'allatonce',
       version => "$SCRIPT_VERSION",
       description => 'Multinational (Schedules Direct JSON web services with SQLite DB)',
-      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s use-category-for-keyword update-description-with-all update-description-with-credits update-description-with-year update-description-with-season-episode update-description-with-icons update-description-with-icons-basic update-description-with-premiere update-description-with-live update-description-with-advisory passwordhash=s/],
+      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s use-category-for-keyword update-description-with-all update-description-with-credits update-description-with-year update-description-with-season-episode update-description-with-icons update-description-with-icons-basic update-description-with-premiere update-description-with-live update-description-with-advisory update-description-with-artwork passwordhash=s/],
       defaults => { days => 30 },
     }
   );
@@ -1588,8 +1588,25 @@ sub get_option_update_description_xx {
     return get_option($name) // get_option('update-description-with-all');
 }
 
+sub get_artwork_image {
+    my ($pID, $artwork, $supArt) = @_;
+    # Get episode artwork. For movies allow any artwork if there is no decent artwork such as poster.
+    # For episodes if there is no decent images in EP then we try SH and finally any image from EP.
+    my ($artURI, $width, $height);
+    if (($artURI, $width, $height) = $SD->getEpisodeImageFromArtwork($artwork, $pID !~ /^EP/)) {
+        return ($artURI, $width, $height);
+    } elsif (($artURI, $width, $height) = $SD->getEpisodeImageFromArtwork($supArt, 1)) {
+        return ($artURI, $width, $height);
+    } elsif (($artURI, $width, $height) = $SD->getEpisodeImageFromArtwork($artwork, 1)) {
+        # And if no good EP image and no good SH image then try any EP image. This
+        # mostly picks up "Iconic" image.
+        return ($artURI, $width, $height);
+    }
+    return undef;
+}
+
 sub get_desc {
-    my ($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories) = @_;
+    my ($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories, $artURI) = @_;
     return $desc unless $desc;
     if (get_option_update_description_xx('update-description-with-year') && $year) {
         $desc = "($year). $desc";
@@ -1654,6 +1671,13 @@ sub get_desc {
 
     if (get_option_update_description_xx('update-description-with-credits') && $actors && length $actors) {
         $desc .= "\n\nActors: $actors";
+    }
+
+    # Have to explicitly request this option since it effectively does html injection.
+    if (get_option('update-description-with-artwork') && $artURI) {
+        my $url = $SD->uriResolve($artURI, '/image');
+        # Make image small
+        $desc .= qq(\n<img src="$url" width="120"/>);
     }
     return $desc;
 }
@@ -1903,6 +1927,7 @@ sub write_programme {
 
         my ($season_num, $episode_num, $season_xmltvns, $episode_xmltvns, $part_xmltvns, $thetvdbSeriesID, $thetvdbEpisodeID) = get_season_episode($pID, $programDetails, $supplementalDetails, $scheduleDetails);
         my $advisories = get_content_advisory($programDetails, $supplementalDetails);
+        my ($artURI, $artWidth, $artHeight) = get_artwork_image($pID, $artwork, $supArt);
 
         my $mythtv_category;
         if (defined($conf->{'mythtv-categories'}->[0]) &&
@@ -2034,7 +2059,7 @@ sub write_programme {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories, $artURI), 'lang' => $lang);
               }
           }
         elsif (defined($programDetails->{'descriptions'}->{'description100'}))
@@ -2044,7 +2069,7 @@ sub write_programme {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories, $artURI), 'lang' => $lang);
               }
           }
         elsif (defined($supplementalDetails->{'descriptions'}->{'description1000'}))
@@ -2054,7 +2079,7 @@ sub write_programme {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories, $artURI), 'lang' => $lang);
               }
           }
         elsif (defined($supplementalDetails->{'descriptions'}->{'description100'}))
@@ -2064,7 +2089,7 @@ sub write_programme {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories, $artURI), 'lang' => $lang);
               }
         }
         print $w2->to_string();
@@ -2122,83 +2147,15 @@ sub write_programme {
             $w->dataElement('length', $supplementalDetails->{'duration'}, 'units' => 'seconds');
           }
 
-        if (defined($programDetails->{'episodeImage'}) &&
-            defined($programDetails->{'episodeImage'}->{'uri'}))
-          {
-            my $url = $SD->uriResolve($programDetails->{'episodeImage'}->{'uri'}, '/image');
-            if (defined($programDetails->{'episodeImage'}->{'width'}) &&
-                defined($programDetails->{'episodeImage'}->{'height'}))
-              {
-                $w->emptyTag('icon', 'src' => $url,
-                                  'width' => $programDetails->{'episodeImage'}->{'width'},
-                                  'height' => $programDetails->{'episodeImage'}->{'height'});
-              }
-            else
-              {
-                $w->emptyTag('icon', 'src' => $url);
-              }
-          }
-        # Get episode artwork. For movies allow any artwork if there is no decent artwork such as poster.
-        # For episodes if there is no decent images in EP then we try SH and finally any image from EP.
-        elsif (my ($artURI, $width, $height) = $SD->getEpisodeImageFromArtwork($artwork, $pID !~ /^EP/))
-          {
+          if ($artURI) {
             my $url = $SD->uriResolve($artURI, '/image');
-            if (defined($width) && defined($height))
-              {
+            if ($artWidth && $artHeight) {
                 $w->emptyTag('icon', 'src' => $url,
-                             'width' => $width,
-                             'height' => $height);
-              }
-            else
-              {
+                             'width' => $artWidth,
+                             'height' => $artHeight);
+            } else {
                 $w->emptyTag('icon', 'src' => $url);
-              }
-        }
-        elsif (defined($supplementalDetails->{'episodeImage'}) &&
-            defined($supplementalDetails->{'episodeImage'}->{'uri'}))
-          {
-            my $url = $SD->uriResolve($supplementalDetails->{'episodeImage'}->{'uri'}, '/image');
-            if (defined($supplementalDetails->{'episodeImage'}->{'width'}) &&
-                defined($supplementalDetails->{'episodeImage'}->{'height'}))
-              {
-                $w->emptyTag('icon', 'src' => $url,
-                                  'width' => $supplementalDetails->{'episodeImage'}->{'width'},
-                                  'height' => $supplementalDetails->{'episodeImage'}->{'height'});
-              }
-            else
-              {
-                $w->emptyTag('icon', 'src' => $url);
-              }
-        }
-        elsif (my ($supArtURI, $supWidth, $supHeight) = $SD->getEpisodeImageFromArtwork($supArt, 1))
-          {
-            my $url = $SD->uriResolve($supArtURI, '/image');
-            if (defined($supWidth) && defined($supHeight))
-              {
-                $w->emptyTag('icon', 'src' => $url,
-                             'width' => $supWidth,
-                             'height' => $supHeight);
-              }
-            else
-              {
-                $w->emptyTag('icon', 'src' => $url);
-              }
-          }
-        # And if no good EP image and no good SH image then try any EP image. This
-        # mostly picks up "Iconic" image.
-        elsif (($artURI, $width, $height) = $SD->getEpisodeImageFromArtwork($artwork, 1))
-          {
-            my $url = $SD->uriResolve($artURI, '/image');
-            if (defined($width) && defined($height))
-              {
-                $w->emptyTag('icon', 'src' => $url,
-                             'width' => $width,
-                             'height' => $height);
-              }
-            else
-              {
-                $w->emptyTag('icon', 'src' => $url);
-              }
+            }
         }
 
         if (defined($programDetails->{'officialURL'}))

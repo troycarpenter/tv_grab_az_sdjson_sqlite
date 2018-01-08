@@ -19,7 +19,7 @@ Erase schedules from DB and force a complete download of data.
 * --use-category-for-keyword
 Instead of outputting keyword tags, output category tags instead. Useful for programs that cannot parse keywords.
 * --update-description-with-all
-Enable all the below "update-description-with-" options except for --update-description-with-icons-basic.
+Enable all the below "update-description-with-" options except for --update-description-with-icons-basic and --update-description-with-artwork.
 * --update-description-with-credits
 Add credits (actors) to description.
 * --update-description-with-year
@@ -37,6 +37,8 @@ Add indicator that an episode is brand new to the description.
 Add indicator that an episode is live to the description.
 * --update-description-with-advisory
 Add content advisories (such as adult language) to description.
+* --update-description-with-artwork
+Some clients allow artwork to be embedded in the description using html image URLs. This option enables this.
 
 Extra Supported Tags and Features
 ---------------------------------
