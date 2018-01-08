@@ -1895,6 +1895,7 @@ sub write_programme {
             }
         my $actors = join ', ', @actors;
         $w2->endTag('credits');
+        $w2->end();
 
         # Only movies (likely) have a date
         my $year = $programDetails->{'movie'}->{'year'} //
@@ -2065,7 +2066,8 @@ sub write_programme {
                 next if ((!defined($lang) || (!defined($desc))));
                 $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories), 'lang' => $lang);
               }
-          }
+        }
+        print $w2->to_string();
 	$w->dataElement('date', $year) if $year;
         $w->dataElement('category', $mythtv_category) if $mythtv_category;
         foreach my $category (sort {$categories->{$a} <=> $categories->{$b}} (keys %{$categories}))
