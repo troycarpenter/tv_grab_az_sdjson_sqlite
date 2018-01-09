@@ -1606,7 +1606,7 @@ sub get_artwork_image {
 }
 
 sub get_desc {
-    my ($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories, $artURI) = @_;
+    my ($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2) = @_;
     return $desc unless $desc;
     if (get_option_update_description_xx('update-description-with-year') && $year) {
         $desc = "($year). $desc";
@@ -1674,10 +1674,17 @@ sub get_desc {
     }
 
     # Have to explicitly request this option since it effectively does html injection.
-    if (get_option('update-description-with-artwork') && $artURI) {
-        my $url = $SD->uriResolve($artURI, '/image');
-        # Make image small
-        $desc .= qq(\n<img src="$url" width="120"/>);
+    if (get_option('update-description-with-artwork')) {
+        if ($artURI) {
+            my $url = $SD->uriResolve($artURI, '/image');
+            # Make image small
+            $desc .= qq(\n<img src="$url" width="120"/>);
+        }
+        if ($artURI2 && $artURI ne $artURI2) {
+            my $url = $SD->uriResolve($artURI2, '/image');
+            # Make image small
+            $desc .= qq(\n<img src="$url" width="120"/>);
+        }
     }
     return $desc;
 }
@@ -1928,6 +1935,8 @@ sub write_programme {
         my ($season_num, $episode_num, $season_xmltvns, $episode_xmltvns, $part_xmltvns, $thetvdbSeriesID, $thetvdbEpisodeID) = get_season_episode($pID, $programDetails, $supplementalDetails, $scheduleDetails);
         my $advisories = get_content_advisory($programDetails, $supplementalDetails);
         my ($artURI, $artWidth, $artHeight) = get_artwork_image($pID, $artwork, $supArt);
+        # Additional artwork, normally specific to the episode
+        my ($artURI2, $artWidth2, $artHeight2) = $SD->getEpisodeImageFromArtwork($artwork, 1);
 
         my $mythtv_category;
         if (defined($conf->{'mythtv-categories'}->[0]) &&
@@ -2059,7 +2068,7 @@ sub write_programme {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories, $artURI), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2), 'lang' => $lang);
               }
           }
         elsif (defined($programDetails->{'descriptions'}->{'description100'}))
@@ -2069,7 +2078,7 @@ sub write_programme {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories, $artURI), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2), 'lang' => $lang);
               }
           }
         elsif (defined($supplementalDetails->{'descriptions'}->{'description1000'}))
@@ -2079,7 +2088,7 @@ sub write_programme {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories, $artURI), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2), 'lang' => $lang);
               }
           }
         elsif (defined($supplementalDetails->{'descriptions'}->{'description100'}))
@@ -2089,7 +2098,7 @@ sub write_programme {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories, $artURI), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2), 'lang' => $lang);
               }
         }
         print $w2->to_string();
