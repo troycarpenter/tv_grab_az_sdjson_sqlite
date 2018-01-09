@@ -19,7 +19,7 @@ Erase schedules from DB and force a complete download of data.
 * --use-category-for-keyword
 Instead of outputting keyword tags, output category tags instead. Useful for programs that cannot parse keywords.
 * --update-description-with-all
-Enable all the below "update-description-with-" options except for --update-description-with-icons-basic and --update-description-with-artwork.
+Enable all the below "update-description-with-" options except for --update-description-with-icons-basic, --update-description-with-icons-entity and --update-description-with-artwork.
 * --update-description-with-credits
 Add credits (actors) to description.
 * --update-description-with-year
@@ -31,6 +31,8 @@ Add icons to the description to indicate category.
 Note that some databases (such as MySQL/MariaDB) have their own idea of utf-8 which defaults to only three-bytes not four-bytes (which they call utf8mb4), so they cannot store all icons correctly.
 * --update-description-with-icons-basic
 Similar to --update-description-with-icons but only include icons that fit in to basic character set so supported by older databases.
+* --update-description-with-icons-entity
+Similar to --update-description-with-icons but use html entities for encoding characters. This will only for some clients which cannot handle utf-8 in the server.
 * --update-description-with-premiere
 Add indicator that an episode is brand new to the description.
 * --update-description-with-live

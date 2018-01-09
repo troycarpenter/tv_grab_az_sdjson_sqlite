@@ -114,6 +114,7 @@ use DateTime::TimeZone;
 use DateTime::Format::ISO8601;
 use DateTime::Format::SQLite;
 use DateTime::Format::Strptime;
+use HTML::Entities;
 use POSIX qw(strftime);
 use List::MoreUtils qw(natatime);
 use List::Util qw/min max/;
@@ -270,7 +271,7 @@ my %catmap_minor = (
       preferredmethod => 'allatonce',
       version => "$SCRIPT_VERSION",
       description => 'Multinational (Schedules Direct JSON web services with SQLite DB)',
-      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s use-category-for-keyword update-description-with-all update-description-with-credits update-description-with-year update-description-with-season-episode update-description-with-icons update-description-with-icons-basic update-description-with-premiere update-description-with-live update-description-with-advisory update-description-with-artwork passwordhash=s/],
+      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s use-category-for-keyword update-description-with-all update-description-with-credits update-description-with-year update-description-with-season-episode update-description-with-icons update-description-with-icons-basic update-description-with-icons-entity update-description-with-premiere update-description-with-live update-description-with-advisory update-description-with-artwork passwordhash=s/],
       defaults => { days => 30 },
     }
   );
@@ -1636,13 +1637,14 @@ sub get_desc {
         $desc = ":$prog_details:\n$desc";
     }
 
-    if (get_option_update_description_xx('update-description-with-icons') or get_option_update_description_xx('update-description-with-icons-basic')) {
+    my $basic = get_option('update-description-with-icons-basic');
+    my $entity = get_option('update-description-with-icons-entity');
+    if (get_option_update_description_xx('update-description-with-icons') || $basic || $entity) {
         # Some databases default to only a broken utf-8 which only
         # handles basic multiplane characters, not four-byte
         # characters. So have an option to only use basic icons.
         # This option has to be explicitly requested since it's for
         # broken clients.
-        my $basic = get_option('update-description-with-icons-basic');
         # We use maps since several categories can map to same icon.
         my %icons_major;
         my %icons_minor;
@@ -1650,10 +1652,20 @@ sub get_desc {
             $category = lc $category;
             my $icon = $catmap_major{$category};
             if ($icon) {
-                $icons_major{$icon} = 1 if (!$basic || ($basic && ord($icon) <= 0xffff));
+                if ($entity) {
+                    $icons_major{encode_entities($icon)} = 1;
+                } else {
+                    $icons_major{$icon} = 1 if (!$basic || ($basic && ord($icon) <= 0xffff));
+                }
             } else {
                 $icon = $catmap_minor{$category};
-                $icons_minor{$icon} = 1 if $icon and (!$basic || ($basic && ord($icon) <= 0xffff));
+                if ($icon) {
+                    if ($entity) {
+                        $icons_minor{encode_entities($icon)} = 1;
+                    } else {
+                        $icons_minor{$icon} = 1 if (!$basic || ($basic && ord($icon) <= 0xffff));
+                    }
+                }
             }
         }
         my $icons_major = join "", keys %icons_major;
