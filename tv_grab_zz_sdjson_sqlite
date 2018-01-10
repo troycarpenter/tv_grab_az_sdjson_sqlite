@@ -271,7 +271,7 @@ my %catmap_minor = (
       preferredmethod => 'allatonce',
       version => "$SCRIPT_VERSION",
       description => 'Multinational (Schedules Direct JSON web services with SQLite DB)',
-      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s use-category-for-keyword update-description-with-all update-description-with-credits update-description-with-year update-description-with-season-episode update-description-with-icons update-description-with-icons-basic update-description-with-icons-entity update-description-with-premiere update-description-with-live update-description-with-advisory update-description-with-artwork update-description-with-stars passwordhash=s/],
+      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s use-category-for-keyword update-description-with-all update-description-with-credits update-description-with-year update-description-with-season-episode update-description-with-icons update-description-with-icons-basic update-description-with-icons-entity update-description-with-premiere update-description-with-live update-description-with-advisory update-description-with-artwork update-description-with-stars content-rating-order=s passwordhash=s/],
       defaults => { days => 30 },
     }
   );
@@ -1582,6 +1582,11 @@ sub get_option {
     return $opt->{$name} // $conf->{$name};
 }
 
+# Get order that content rating should be sorted.
+sub get_content_rating_order {
+    return get_option('content-rating-order') // 'MPAA,VCHIP,CHVRS,BBFC,UK,BFC';
+}
+
 # Get option for update_description_... with fallback to allowing
 # user-convenience of update-description-with-all to enable all features.
 sub get_option_update_description_xx {
@@ -2388,6 +2393,22 @@ sub write_programme {
               }
           }
         # Write out the the collected ratings
+        my $cro = get_content_rating_order();
+        if ($cro) {
+            my @cro;
+            push @cro, $_ for (split /,/, $cro);
+            while (my $pref = shift @cro) {
+                for my $rating(%{$ratings}) {
+                    if ($rating eq $pref) {
+                        $w->startTag('rating', 'system' => $rating);
+                        $w->dataElement('value', $ratings->{$rating});
+                        $w->endTag('rating');
+                        delete $ratings->{$rating};
+                        last;
+                    }
+                }
+            }
+        }
         foreach my $rating(sort keys %{$ratings})
           {
             $w->startTag('rating', 'system' => $rating);

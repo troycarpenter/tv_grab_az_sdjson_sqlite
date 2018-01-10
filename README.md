@@ -16,6 +16,9 @@ Do not download the schedule, use database cache only.
 Do not prune the database of old schedules. Useful if running multiple times.
 * --force-download
 Erase schedules from DB and force a complete download of data.
+* --content-rating-order=s
+Use a specific content rating order based on rating agency. For example "MPAA,VCHIP" will prefer those to all other rating systems.
+This is useful since many movies have multiple ratings but many systems only take the first content rating.
 * --use-category-for-keyword
 Instead of outputting keyword tags, output category tags instead. Useful for programs that cannot parse keywords.
 * --update-description-with-all
