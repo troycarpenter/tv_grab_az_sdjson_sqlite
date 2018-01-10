@@ -271,7 +271,7 @@ my %catmap_minor = (
       preferredmethod => 'allatonce',
       version => "$SCRIPT_VERSION",
       description => 'Multinational (Schedules Direct JSON web services with SQLite DB)',
-      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s use-category-for-keyword update-description-with-all update-description-with-credits update-description-with-year update-description-with-season-episode update-description-with-icons update-description-with-icons-basic update-description-with-icons-entity update-description-with-premiere update-description-with-live update-description-with-advisory update-description-with-artwork passwordhash=s/],
+      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s use-category-for-keyword update-description-with-all update-description-with-credits update-description-with-year update-description-with-season-episode update-description-with-icons update-description-with-icons-basic update-description-with-icons-entity update-description-with-premiere update-description-with-live update-description-with-advisory update-description-with-artwork update-description-with-stars passwordhash=s/],
       defaults => { days => 30 },
     }
   );
@@ -1607,8 +1607,24 @@ sub get_artwork_image {
 }
 
 sub get_desc {
-    my ($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2) = @_;
+    my ($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails) = @_;
     return $desc unless $desc;
+
+    if (get_option_update_description_xx('update-description-with-stars') && defined($programDetails->{'movie'}->{'qualityRating'})) {
+        my $stars;
+        foreach my $quality(@{$programDetails->{'movie'}->{'qualityRating'}}) {
+            my $min = $quality->{'minRating'};
+            my $max = $quality->{'maxRating'};
+            my $rating = $quality->{'rating'};
+            if ($max == 4 && $min == 1) {
+                $stars = "\N{WHITE STAR}" x $rating;
+                $stars .= "\N{VULGAR FRACTION ONE HALF}" if ($rating - int($rating) > 0);
+                last;
+            }
+        }
+        $desc = "$stars. $desc" if ($stars);
+    }
+
     if (get_option_update_description_xx('update-description-with-year') && $year) {
         $desc = "($year). $desc";
     }
@@ -1635,6 +1651,17 @@ sub get_desc {
         # whereas "NEW" (without colons) might not be easy to find
         # with case-insensitive searches.
         $desc = ":$prog_details:\n$desc";
+    }
+
+    if (get_option_update_description_xx('update-description-with-advisory')) {
+        my @advisory;
+        push @advisory, $_ foreach (sort keys %{$advisories});
+        my $advisory = join ", ", @advisory;
+        $desc = "$desc\n\nAdvisory: $advisory" if $advisory;
+    }
+
+    if (get_option_update_description_xx('update-description-with-credits') && $actors && length $actors) {
+        $desc .= "\n\nActors: $actors";
     }
 
     my $basic = get_option('update-description-with-icons-basic');
@@ -1671,18 +1698,7 @@ sub get_desc {
         my $icons_major = join "", keys %icons_major;
         my $icons_minor = join "", keys %icons_minor;
         my $icons = $icons_major . $icons_minor;
-        $desc = "$icons\n$desc" if length $icons;
-    }
-
-    if (get_option_update_description_xx('update-description-with-advisory')) {
-        my @advisory;
-        push @advisory, $_ foreach (sort keys %{$advisories});
-        my $advisory = join ", ", @advisory;
-        $desc = "$desc\n\nAdvisory: $advisory" if $advisory;
-    }
-
-    if (get_option_update_description_xx('update-description-with-credits') && $actors && length $actors) {
-        $desc .= "\n\nActors: $actors";
+        $desc = "$desc\n$icons" if length $icons;
     }
 
     # Have to explicitly request this option since it effectively does html injection.
@@ -1698,6 +1714,7 @@ sub get_desc {
             $desc .= qq(\n<img src="$url" width="120"/>);
         }
     }
+
     return $desc;
 }
 
@@ -2080,7 +2097,7 @@ sub write_programme {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails), 'lang' => $lang);
               }
           }
         elsif (defined($programDetails->{'descriptions'}->{'description100'}))
@@ -2090,7 +2107,7 @@ sub write_programme {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails), 'lang' => $lang);
               }
           }
         elsif (defined($supplementalDetails->{'descriptions'}->{'description1000'}))
@@ -2100,7 +2117,7 @@ sub write_programme {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails), 'lang' => $lang);
               }
           }
         elsif (defined($supplementalDetails->{'descriptions'}->{'description100'}))
@@ -2110,7 +2127,7 @@ sub write_programme {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails), 'lang' => $lang);
               }
         }
         print $w2->to_string();

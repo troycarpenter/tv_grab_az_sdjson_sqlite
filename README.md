@@ -41,6 +41,8 @@ Add indicator that an episode is live to the description.
 Add content advisories (such as adult language) to description.
 * --update-description-with-artwork
 Some clients allow artwork to be embedded in the description using html image URLs. This option enables this.
+* --update-description-with-stars
+Add star rating to description.
 
 Extra Supported Tags and Features
 ---------------------------------
