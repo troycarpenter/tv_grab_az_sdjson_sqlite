@@ -1684,18 +1684,20 @@ sub get_desc {
             $category = lc $category;
             my $icon = $catmap_major{$category};
             if ($icon) {
-                if ($entity) {
+                my $is_basic_icon = ord($icon) <= 0xffff;
+                if ($entity && !$is_basic_icon) {
                     $icons_major{encode_entities($icon)} = 1;
                 } else {
-                    $icons_major{$icon} = 1 if (!$basic || ($basic && ord($icon) <= 0xffff));
+                    $icons_major{$icon} = 1 if (!$basic || ($basic && $is_basic_icon));
                 }
             } else {
                 $icon = $catmap_minor{$category};
                 if ($icon) {
-                    if ($entity) {
+                    my $is_basic_icon = ord($icon) <= 0xffff;
+                    if ($entity && !$is_basic_icon) {
                         $icons_minor{encode_entities($icon)} = 1;
                     } else {
-                        $icons_minor{$icon} = 1 if (!$basic || ($basic && ord($icon) <= 0xffff));
+                        $icons_minor{$icon} = 1 if (!$basic || ($basic && $is_basic_icon));
                     }
                 }
             }
