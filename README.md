@@ -1,4 +1,4 @@
-# tv_grab_zz_sdjson_sqlite
+# tv_grab_az_sdjson_sqlite
 XMLTV grabber for Schedules Direct JSON service
 
 Extra Options

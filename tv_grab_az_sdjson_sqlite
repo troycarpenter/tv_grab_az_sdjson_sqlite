@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# tv_grab_zz_sdjson_sqlite
+# tv_grab_az_sdjson_sqlite
 #
 # Copyright (c) 2016, 2017 Gary Buhrmaster <gary.buhrmaster@gmail.com>
 #
@@ -21,7 +21,7 @@
 #
 #
 # For extended help information run
-#     tv_grab_zz_sdjson_sqlite --info
+#     tv_grab_az_sdjson_sqlite --info
 #
 #
 # NOTE - Automated XMLTV testing will report failure since Schedules Direct
@@ -128,8 +128,8 @@ use Data::Dumper;
 my $RFC2838_COMPLIANT          = 1;            # RFC2838 compliant station ids, which makes XMLTV
                                                # validate even though the docs say "SHOULD" not "MUST"
 
-my $SCRIPT_VERSION             = '$Id: tv_grab_zz_sdjson_sqlite,v 1.34 2017/10/11 01:19:00 gtb Exp ed $';
-my $SCRIPT_URL                 = 'https://github.com/garybuhrmaster/tv_grab_zz_sdjson_sqlite';
+my $SCRIPT_VERSION             = '$Id: tv_grab_az_sdjson_sqlite,v 1.34 2017/10/11 01:19:00 gtb Exp ed $';
+my $SCRIPT_URL                 = 'https://github.com/azlm8t/tv_grab_zz_sdjson_sqlite';
 my $SCRIPT_NAME                = basename("$0");
 my $SCRIPT_NAME_DIR            = dirname("$0");
 
@@ -5727,40 +5727,40 @@ sub mapUSATSCChannelToFrequency
 
 =head1 NAME
 
-tv_grab_zz_sdjson_sqlite - Grab TV and radio program listings from Schedules Direct (subscription required).
+tv_grab_az_sdjson_sqlite - Grab TV and radio program listings from Schedules Direct (subscription required).
 
 =head1 SYNOPSIS
 
-tv_grab_zz_sdjson_sqlite --help
+tv_grab_az_sdjson_sqlite --help
 
-tv_grab_zz_sdjson_sqlite --info
+tv_grab_az_sdjson_sqlite --info
 
-tv_grab_zz_sdjson_sqlite --version
+tv_grab_az_sdjson_sqlite --version
 
-tv_grab_zz_sdjson_sqlite --capabilities
+tv_grab_az_sdjson_sqlite --capabilities
 
-tv_grab_zz_sdjson_sqlite --description
+tv_grab_az_sdjson_sqlite --description
 
-tv_grab_zz_sdjson_sqlite --manage-lineups [--config-file FILE]
+tv_grab_az_sdjson_sqlite --manage-lineups [--config-file FILE]
               [--quiet] [--debug] [--passwordhash HASH]
 
-tv_grab_zz_sdjson_sqlite [--days N] [--offset N] [--config-file FILE]
+tv_grab_az_sdjson_sqlite [--days N] [--offset N] [--config-file FILE]
               [--output FILE] [--quiet] [--debug]
               [--passwordhash HASH]
 
-tv_grab_zz_sdjson_sqlite --configure [--config-file FILE]
+tv_grab_az_sdjson_sqlite --configure [--config-file FILE]
               [--quiet] [--debug]
               [--passwordhash HASH]
 
-tv_grab_zz_sdjson_sqlite --list-channels [--config-file FILE]
+tv_grab_az_sdjson_sqlite --list-channels [--config-file FILE]
               [--output FILE] [--quiet] [--debug]
               [--passwordhash HASH]
 
-tv_grab_zz_sdjson_sqlite --list-lineups  [--config-file FILE]
+tv_grab_az_sdjson_sqlite --list-lineups  [--config-file FILE]
               [--output FILE] [--quiet] [--debug]
               [--passwordhash HASH]
 
-tv_grab_zz_sdjson_sqlite --get-lineup [--config-file FILE]
+tv_grab_az_sdjson_sqlite --get-lineup [--config-file FILE]
               [--output FILE] [--quiet] [--debug]
               [--passwordhash HASH]
 
@@ -5780,11 +5780,11 @@ substantially reduce the download times (as some data such
 as schedules and program details are commonly shared between
 sources in the same location).
 
-First, you must run B<tv_grab_zz_sdjson_sqlite --manage-lineups>
+First, you must run B<tv_grab_az_sdjson_sqlite --manage-lineups>
 to manage the lineups available to your grabber configuration
 at the Schedules Direct service.
 
-Second, you must run B<tv_grab_zz_sdjson_sqlite --configure> to
+Second, you must run B<tv_grab_az_sdjson_sqlite --configure> to
 choose which lineup this configuration will grab (this grabber
 will share the downloaded information for multiple lineups,
 and can substantially reduce the royal overheads in those
@@ -5806,7 +5806,7 @@ configuration file.  Note that one must run --manage-lineups
 first to create and initialize the database and configure lineups.
 
 B<--config-file FILE> Set the name of the configuration file, the
-default is B<~/.xmltv/tv_grab_zz_sdjson_sqlite.conf>.  This is
+default is B<~/.xmltv/tv_grab_az_sdjson_sqlite.conf>.  This is
 the file written by B<--configure> and read when grabbing.
 
 B<--output FILE> When grabbing, write output to FILE rather than
@@ -5869,16 +5869,16 @@ for signup requirements, and the countries served.
 2.
 Second you need to configure the lineups that you will have
 access to using your account with this grabber.  Run
-B<tv_grab_zz_sdjson_sqlite --manage-lineups> to add your lineups and
+B<tv_grab_az_sdjson_sqlite --manage-lineups> to add your lineups and
 to initialize the database.
 
 3.
 Third, you will need to configure this specific instance of
 the grabber to select the lineup to use.  Run
-B<tv_grab_zz_sdjson_sqlite --configure>.
+B<tv_grab_az_sdjson_sqlite --configure>.
 
 4.
-(Optionally) run B<tv_grab_zz_sdjson_sqlite --download-only> to download
+(Optionally) run B<tv_grab_az_sdjson_sqlite --download-only> to download
 and "fill" the local database copies of your data.  In future
 runs, only updated information will be downloaded, and the
 local database will be pruned to delete old/obsolete information.
@@ -6093,7 +6093,7 @@ sub new
     $self->{'PasswordHash'} = undef unless $self->{'PasswordHash'};
     $self->{'PasswordHash'} = sha1_hex($self->{'Password'}) if defined($self->{'Password'});
     delete $self->{'Password'};
-    $self->{'UserAgent'} = 'tv_grab_zz_sdjson_sqlite' unless $self->{'UserAgent'};
+    $self->{'UserAgent'} = 'tv_grab_az_sdjson_sqlite' unless $self->{'UserAgent'};
     $self->{'Debug'} = 0 unless $self->{'Debug'};
     $self->{'RESTUrl'} = 'https://json.schedulesdirect.org/20141201' unless $self->{'RESTUrl'};
     $self->{'RaiseError'} = 0 unless $self->{'RaiseError'};    # Not (yet) implemented
