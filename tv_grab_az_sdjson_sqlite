@@ -1965,8 +1965,11 @@ sub write_programme {
         $w2->end();
 
         # Only movies (likely) have a date
+        # But for series we can use original air date and use entire date.
         my $year = $programDetails->{'movie'}->{'year'} //
-          $supplementalDetails->{'movie'}->{'year'};
+          $supplementalDetails->{'movie'}->{'year'} //
+          $programDetails->{originalAirDate} //
+          $supplementalDetails->{originalAirDate};
 
         my ($season_num, $episode_num, $season_xmltvns, $episode_xmltvns, $part_xmltvns, $thetvdbSeriesID, $thetvdbEpisodeID) = get_season_episode($pID, $programDetails, $supplementalDetails, $scheduleDetails);
         my $advisories = get_content_advisory($programDetails, $supplementalDetails);
