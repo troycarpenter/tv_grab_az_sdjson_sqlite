@@ -1666,7 +1666,7 @@ sub get_desc {
     }
 
     if (get_option_update_description_xx('update-description-with-credits') && $actors && length $actors) {
-        $desc .= "\n\nActors: $actors";
+        $desc .= "\n\nCast: $actors";
     }
 
     my $basic = get_option('update-description-with-icons-basic');
