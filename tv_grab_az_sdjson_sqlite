@@ -271,7 +271,7 @@ my %catmap_minor = (
       preferredmethod => 'allatonce',
       version => "$SCRIPT_VERSION",
       description => 'Multinational (Schedules Direct JSON web services with SQLite DB)',
-      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s use-category-for-keyword! update-description-with-all! update-description-with-credits! update-description-with-year! update-description-with-season-episode! update-description-with-icons! update-description-with-icons-basic! update-description-with-icons-entity! update-description-with-premiere! update-description-with-live! update-description-with-advisory! update-description-with-artwork! update-description-with-stars! content-rating-order=s passwordhash=s/],
+      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s channel-exclude-regex=s use-category-for-keyword! update-description-with-all! update-description-with-credits! update-description-with-year! update-description-with-season-episode! update-description-with-icons! update-description-with-icons-basic! update-description-with-icons-entity! update-description-with-premiere! update-description-with-live! update-description-with-advisory! update-description-with-artwork! update-description-with-stars! content-rating-order=s passwordhash=s/],
       defaults => { days => 30 },
     }
   );
@@ -282,6 +282,7 @@ $debug = $opt->{'debug'};
 $quiet = $opt->{'quiet'};
 $passwordHash = $opt->{'passwordhash'};
 my $channelRegex = $opt->{'channel-regex'};
+my $channelExcludeRegex = $opt->{'channel-exclude-regex'};
 
 $SD->Debug(1) if ($debug);
 
@@ -1515,7 +1516,10 @@ sub output_program {
     my $programDetails = $JSON->decode($r->[5]) if defined($r->[5]);
     my $stationDetails = $JSON->decode($r->[8]) if defined $r->[8];
     my $supplementalDetails = $JSON->decode($r->[9]) if defined($r->[9]);
-    return 0 if ($channelRegex && $stationDetails && $stationDetails->{name} && $stationDetails->{name} !~ $channelRegex);
+    if ($stationDetails && $stationDetails->{name}) {
+        return 0 if $channelRegex        && $stationDetails->{name} !~ $channelRegex;
+        return 0 if $channelExcludeRegex && $stationDetails->{name} =~ $channelExcludeRegex;
+    }
 
     # Shortcut logic if we are not merging programmes.
     if (!$merge_split) {
@@ -1948,7 +1952,7 @@ sub write_programme {
                   if ((0 == scalar(@{$roles->{$role}->{$person}->{'character'}})) || ($role ne 'actor'))
                     {
                       $w2->dataElement($role, $person);
-                      push @actors, $person if $role eq 'actor';
+                      push @actors, $person if $role eq 'actor' or $role eq 'presenter' or $role eq 'commentator' or $role eq 'guest';
                     }
                   else
                     {
@@ -2842,7 +2846,8 @@ sub channelWriter
           {
             $s = $JSON->decode($r->[3]);
           }
-        next if $channelRegex && $s->{name} && $s->{name} !~ $channelRegex;
+        next if $channelRegex        && $s->{name} && $s->{name} !~ $channelRegex;
+        next if $channelExcludeRegex && $s->{name} && $s->{name} =~ $channelExcludeRegex;
 
         $writer->startTag('channel', 'id' => generateRFC2838($sID) ) ;
 

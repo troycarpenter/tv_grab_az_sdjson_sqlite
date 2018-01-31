@@ -8,8 +8,8 @@ Extra Options
 Movies that are split in to two segments by news programmes will be automatically merged if the news is <=_n_ minutes long.
 * --artwork-max-width=n
 Prefer artwork with a width no larger than _n_. If no artwork exists at that size then larger artwork may be used.
-* --channel-regex=regex
-When outputting xmltv file, only output details for channels matching the _regex_. This allows the user to run the grabber multiple times and output extra days for important channels.
+* --channel-regex=regex and ---channel-exclude-regex=regex
+When outputting xmltv file, only output details for channels matching/not matching the _regex_. This allows the user to run the grabber multiple times and output extra days for important channels.
 * --no-download
 Do not download the schedule, use database cache only.
 * --no-prune
