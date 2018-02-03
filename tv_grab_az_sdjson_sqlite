@@ -1678,7 +1678,7 @@ sub get_desc {
         push @cat, $_ for (sort keys %{$categories});
         if (scalar @cat) {
             my $cat = join ', ', @cat;
-            $desc .= "\nCategories: $cat.";
+            $desc .= "\n\nCategories: $cat.";
         }
     }
 
