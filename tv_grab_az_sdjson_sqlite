@@ -271,7 +271,7 @@ my %catmap_minor = (
       preferredmethod => 'allatonce',
       version => "$SCRIPT_VERSION",
       description => 'Multinational (Schedules Direct JSON web services with SQLite DB)',
-      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s channel-exclude-regex=s use-category-for-keyword! update-description-with-all! update-description-with-credits! update-description-with-categories! update-description-with-year! update-description-with-season-episode! update-description-with-icons! update-description-with-icons-basic! update-description-with-icons-entity! update-description-with-premiere! update-description-with-live! update-description-with-advisory! update-description-with-artwork! update-description-with-stars! content-rating-order=s passwordhash=s/],
+      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s channel-exclude-regex=s use-category-for-keyword! update-description-with-all! update-description-with-credits! update-description-with-categories! update-description-with-year! update-description-with-season-episode! update-description-with-icons! update-description-with-icons-basic! update-description-with-icons-entity! update-description-with-premiere! update-description-with-live! update-description-with-advisory! update-description-with-artwork! update-description-with-stars! update-previously-shown-with-year! content-rating-order=s passwordhash=s/],
       defaults => { days => 30 },
     }
   );
@@ -2326,7 +2326,12 @@ sub write_programme {
           {
             my $new = 0;
             $new = $scheduleDetails->{'new'} if (defined($scheduleDetails->{'new'}));
-            $w->emptyTag('previously-shown') if (!$new);
+            # It's useful for some clients to have year copied in to previously-shown.
+            if ($year && get_option('update-previously-shown-with-year')) {
+                $w->emptyTag('previously-shown', start => $year);
+            } else {
+                $w->emptyTag('previously-shown') if (!$new);
+            }
           }
 
         # XMLTV premiere/last-chance is sort of arbitrarily

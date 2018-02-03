@@ -48,6 +48,8 @@ Add content advisories (such as adult language) to description.
 Some clients allow artwork to be embedded in the description using html image URLs. This option enables this.
 * --update-description-with-stars
 Add star rating to description.
+* --update-previously-shown-with-year
+Movies often have details of the year they were made but some clients expect those details in the previously-shown field.
 
 Extra Supported Tags and Features
 ---------------------------------
