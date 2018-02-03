@@ -25,6 +25,8 @@ Instead of outputting keyword tags, output category tags instead. Useful for pro
 Enable all the below "update-description-with-" options except for --update-description-with-icons-basic, --update-description-with-icons-entity and --update-description-with-artwork.
 * --update-description-with-credits
 Add credits (actors) to description.
+* --update-description-with-categories
+Include categories in description.
 * --update-description-with-year
 Add year to description, for example year movie was made.
 * --update-description-with-season-episode

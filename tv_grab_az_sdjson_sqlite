@@ -271,7 +271,7 @@ my %catmap_minor = (
       preferredmethod => 'allatonce',
       version => "$SCRIPT_VERSION",
       description => 'Multinational (Schedules Direct JSON web services with SQLite DB)',
-      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s channel-exclude-regex=s use-category-for-keyword! update-description-with-all! update-description-with-credits! update-description-with-year! update-description-with-season-episode! update-description-with-icons! update-description-with-icons-basic! update-description-with-icons-entity! update-description-with-premiere! update-description-with-live! update-description-with-advisory! update-description-with-artwork! update-description-with-stars! content-rating-order=s passwordhash=s/],
+      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s channel-exclude-regex=s use-category-for-keyword! update-description-with-all! update-description-with-credits! update-description-with-categories! update-description-with-year! update-description-with-season-episode! update-description-with-icons! update-description-with-icons-basic! update-description-with-icons-entity! update-description-with-premiere! update-description-with-live! update-description-with-advisory! update-description-with-artwork! update-description-with-stars! content-rating-order=s passwordhash=s/],
       defaults => { days => 30 },
     }
   );
@@ -1671,6 +1671,15 @@ sub get_desc {
 
     if (get_option_update_description_xx('update-description-with-credits') && $actors && length $actors) {
         $desc .= "\n\nCast: $actors.";
+    }
+
+    if (get_option_update_description_xx('update-description-with-categories')) {
+        my @cat;
+        push @cat, $_ for (sort keys %{$categories});
+        if (scalar @cat) {
+            my $cat = join ', ', @cat;
+            $desc .= "\nCategories: $cat.";
+        }
     }
 
     my $basic = get_option('update-description-with-icons-basic');
