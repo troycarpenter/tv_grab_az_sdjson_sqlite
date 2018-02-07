@@ -1642,13 +1642,15 @@ sub get_desc {
         my $s_str = "";
         $s_str .= "S$season_num" if $season_num;
         $s_str .= "/$max_season_num" if $season_num and $max_season_num;
-        push @str, $s_str;
+        push @str, $s_str if $s_str;
         my $e_str = "";
         $e_str .= "E$episode_num" if $episode_num;
         $e_str .= "/$max_episode_num" if $episode_num and $max_episode_num;
-        push @str, $e_str;
-        my $str = join " ", @str;
-        $desc = "$str. $desc" if length $str;
+        push @str, $e_str if $e_str;
+        if (scalar @str) {
+            my $str = join ' ', @str;
+            $desc = "$str. $desc" if length $str;
+        }
     }
     my @prog_details;
     if (get_option_update_description_xx('update-description-with-premiere')) {
