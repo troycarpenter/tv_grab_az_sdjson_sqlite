@@ -1616,7 +1616,7 @@ sub get_artwork_image {
 }
 
 sub get_desc {
-    my ($desc, $actors, $year, $season_num, $episode_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails) = @_;
+    my ($desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails) = @_;
     return $desc unless $desc;
 
     if (get_option_update_description_xx('update-description-with-stars') && defined($programDetails->{'movie'}->{'qualityRating'})) {
@@ -1638,10 +1638,16 @@ sub get_desc {
         $desc = "($year). $desc";
     }
     if (get_option_update_description_xx('update-description-with-season-episode') ) {
-        my $str = "";
-        $str .= "S$season_num" if $season_num;
-        $str .= "E$episode_num" if $episode_num;
-        $str .= "/$max_episode_num" if $episode_num and $max_episode_num;
+        my @str;
+        my $s_str = "";
+        $s_str .= "S$season_num" if $season_num;
+        $s_str .= "/$max_season_num" if $season_num and $max_season_num;
+        push @str, $s_str;
+        my $e_str = "";
+        $e_str .= "E$episode_num" if $episode_num;
+        $e_str .= "/$max_episode_num" if $episode_num and $max_episode_num;
+        push @str, $e_str;
+        my $str = join " ", @str;
         $desc = "$str. $desc" if length $str;
     }
     my @prog_details;
@@ -1825,23 +1831,24 @@ sub get_season_episode {
         # systems due to Gracenote having a gap for an unaired S3E17.
         # But we only use the TVDB if it differs since Gracenote often
         # has total number of episodes/seasons.
-        my ($season_num, $episode_num, $max_episode_num);
+        my ($season_num, $max_season_num, $episode_num, $max_episode_num);
         if (($thetvdbSeason  && $programSeason  && ($thetvdbSeason  != $programSeason)) ||
             ($thetvdbEpisode && $programEpisode && ($thetvdbEpisode != $programEpisode))) {
             $season = generateXMLTV_NS($thetvdbSeason, undef);
             $episode = generateXMLTV_NS($thetvdbEpisode, undef);
             $season_num = $thetvdbSeason;
             $episode_num = $thetvdbEpisode;
-            # $max_episode_num unset
+            # $max_season_num and $max_episode_num remain unset
         } else {
             $season = generateXMLTV_NS($programSeason, $showTotalSeasons);
             $episode = generateXMLTV_NS($programEpisode, $programTotalEpisodes);
             $season_num = $programSeason;
             $episode_num = $programEpisode;
             $max_episode_num = $programTotalEpisodes;
+            $max_season_num = $showTotalSeasons;
         }
         $part = generateXMLTV_NS($showingPart, $showingTotalParts);
-        return ($season_num, $episode_num, $max_episode_num, $season, $episode, $part, $thetvdbSeriesID, $thetvdbEpisodeID);
+        return ($season_num, $episode_num, $max_season_num, $max_episode_num, $season, $episode, $part, $thetvdbSeriesID, $thetvdbEpisodeID);
 }
 
 sub get_content_advisory {
@@ -1986,7 +1993,7 @@ sub write_programme {
           $programDetails->{originalAirDate} //
           $supplementalDetails->{originalAirDate};
 
-        my ($season_num, $episode_num, $max_episode_num, $season_xmltvns, $episode_xmltvns, $part_xmltvns, $thetvdbSeriesID, $thetvdbEpisodeID) = get_season_episode($pID, $programDetails, $supplementalDetails, $scheduleDetails);
+        my ($season_num, $episode_num, $max_season_num, $max_episode_num, $season_xmltvns, $episode_xmltvns, $part_xmltvns, $thetvdbSeriesID, $thetvdbEpisodeID) = get_season_episode($pID, $programDetails, $supplementalDetails, $scheduleDetails);
         my $advisories = get_content_advisory($programDetails, $supplementalDetails);
         my ($artURI, $artWidth, $artHeight) = get_artwork_image($pID, $artwork, $supArt);
         # Additional artwork, normally specific to the episode
@@ -2122,7 +2129,7 @@ sub write_programme {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails), 'lang' => $lang);
               }
           }
         elsif (defined($programDetails->{'descriptions'}->{'description100'}))
@@ -2132,7 +2139,7 @@ sub write_programme {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails), 'lang' => $lang);
               }
           }
         elsif (defined($supplementalDetails->{'descriptions'}->{'description1000'}))
@@ -2142,7 +2149,7 @@ sub write_programme {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails), 'lang' => $lang);
               }
           }
         elsif (defined($supplementalDetails->{'descriptions'}->{'description100'}))
@@ -2152,7 +2159,7 @@ sub write_programme {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails), 'lang' => $lang);
               }
         }
         print $w2->to_string();
