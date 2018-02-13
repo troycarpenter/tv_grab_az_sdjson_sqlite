@@ -1934,11 +1934,25 @@ sub write_programme {
         # All too often the supplemental (SHow) has more
         # detailed cast/crew data that the program (EPisode)
         # itself, and in particular, the character.
+
+        # We use program details otherwise supplemental.
+        # We don't merge the details since frequently
+        # long running shows will have all regular cast
+        # including people that no longer star in the show
+        # in supplemental whereas program details has cast
+        # for just this episode.
         if (defined($programDetails->{'cast'}))
           {
             foreach my $cast(@{$programDetails->{'cast'}})
               {
                 addRole($roles, $castMap->{$cast->{'role'}}, $cast->{'name'}, $cast->{'billingOrder'}, $cast->{'characterName'});
+              }
+          }
+        elsif (defined($supplementalDetails->{'cast'}))
+          {
+            foreach my $cast(@{$supplementalDetails->{'cast'}})
+              {
+                addRole($roles, $castMap->{$cast->{'role'}}, $cast->{'name'}, '10' . $cast->{'billingOrder'}, $cast->{'characterName'});
               }
           }
         if (defined($programDetails->{'crew'}))
@@ -1948,14 +1962,7 @@ sub write_programme {
                 addRole($roles, $crewMap->{$crew->{'role'}}, $crew->{'name'}, $crew->{'billingOrder'}, undef);
               }
           }
-        if (defined($supplementalDetails->{'cast'}))
-          {
-            foreach my $cast(@{$supplementalDetails->{'cast'}})
-              {
-                addRole($roles, $castMap->{$cast->{'role'}}, $cast->{'name'}, '10' . $cast->{'billingOrder'}, $cast->{'characterName'});
-              }
-          }
-        if (defined($supplementalDetails->{'crew'}))
+        elsif (defined($supplementalDetails->{'crew'}))
           {
             foreach my $crew(@{$supplementalDetails->{'crew'}})
               {
