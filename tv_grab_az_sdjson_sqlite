@@ -4988,7 +4988,8 @@ sub manageLineups
         $prompt .= "======================================================================\n";
         for my $l (@{$lineups})
           {
-            my $desc = "$l->{'name'} ($l->{'transport'} $l->{'location'})";
+            # my $desc = "$l->{'name'} ($l->{'transport'} $l->{'location'})";
+            my $desc = ($l->{'name'} // "N/A") . " " . ($l->{'transport'} // "N/A") . " " . ($l->{'location'} // "N/A");
             $prompt .= sprintf("%-20s %s\n", $l->{'lineup'}, $desc);
           }
 
