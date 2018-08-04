@@ -2905,6 +2905,11 @@ sub channelWriter
               $tmpdn =~ s/[+]1$/ +1/;
               $writer->dataElement('display-name', $tmpdn, 'lang' => 'en') if $tmpdn;
           }
+          {
+              # Some historic European channel names are uppercase only.
+              my $tmpdn = uc $name;
+              $writer->dataElement('display-name', $tmpdn, 'lang' => 'en') if ($tmpdn ne $name);
+          }
           $writer->dataElement('display-name', $callsign, 'lang' => 'en') if ($callsign ne '');
           $writer->dataElement('display-name', $svcid, 'lang' => 'en') if $svcid;
           $writer->dataElement('display-name', $channum, 'lang' => 'en') if ($channum ne '');
