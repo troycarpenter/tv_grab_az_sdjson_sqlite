@@ -1747,6 +1747,91 @@ sub get_desc {
     return $desc;
 }
 
+# Schedules Direct data can have duplicate ratings for
+# a body (one in the schedule, one in the program, and
+# one for the show/series), so we store only the last,
+# if multiple exist.  We remap the rating agency to the
+# MythTV standard, as it is as good of a standard as
+# anything else, and makes importing the data much easier.
+sub get_ratings {
+    my ($supplementalDetails, $programDetails, $scheduleDetails) = @_;
+    my $ratings = {};
+    # Supplemental can have generic show ratings
+    if (defined($supplementalDetails->{'contentRating'})) {
+        foreach my $rating (@{$supplementalDetails->{'contentRating'}}) {
+            my $body = $rating->{'body'};
+            my $code = $rating->{'code'};
+            ($body, $code) = mapRatingAgency($body, $code);
+            if (defined($body) && defined($code)) {
+                $ratings->{$body} = $code;
+            }
+        }
+    }
+    # Programs can have rating for this specific program
+    if (defined($programDetails->{'contentRating'})) {
+        foreach my $rating (@{$programDetails->{'contentRating'}}) {
+            my $body = $rating->{'body'};
+            my $code = $rating->{'code'};
+            ($body, $code) = mapRatingAgency($body, $code);
+            if (defined($body) && defined($code)) {
+                $ratings->{$body} = $code;
+            }
+        }
+    }
+    # Schedule ratings are for this airing, and may be
+    # different than for the (original) program.  We
+    # overwrite any program ratings with schedule (airing)
+    # ratings if duplicates exist.
+    if (defined($scheduleDetails->{'ratings'})) {
+        foreach my $rating (@{$scheduleDetails->{'ratings'}}) {
+            my $body = $rating->{'body'};
+            my $code = $rating->{'code'};
+            ($body, $code) = mapRatingAgency($body, $code);
+            if (defined($body) && defined($code)) {
+                $ratings->{$body} = $code;
+            }
+        }
+    }
+    
+    # Supplemental can have generic show ratings
+    if (defined($supplementalDetails->{'contentRating'})) {
+        foreach my $rating (@{$supplementalDetails->{'contentRating'}}) {
+            my $body = $rating->{'body'};
+            my $code = $rating->{'code'};
+            ($body, $code) = mapRatingAgency($body, $code);
+            if (defined($body) && defined($code)) {
+                $ratings->{$body} = $code;
+            }
+        }
+    }
+    # Programs can have rating for this specific program
+    if (defined($programDetails->{'contentRating'})) {
+        foreach my $rating (@{$programDetails->{'contentRating'}}) {
+            my $body = $rating->{'body'};
+            my $code = $rating->{'code'};
+            ($body, $code) = mapRatingAgency($body, $code);
+            if (defined($body) && defined($code)) {
+                $ratings->{$body} = $code;
+            }
+        }
+    }
+    # Schedule ratings are for this airing, and may be
+    # different than for the (original) program.  We
+    # overwrite any program ratings with schedule (airing)
+    # ratings if duplicates exist.
+    if (defined($scheduleDetails->{'ratings'})) {
+        foreach my $rating (@{$scheduleDetails->{'ratings'}}) {
+            my $body = $rating->{'body'};
+            my $code = $rating->{'code'};
+            ($body, $code) = mapRatingAgency($body, $code);
+            if (defined($body) && defined($code)) {
+                $ratings->{$body} = $code;
+            }
+        }
+    }
+    return $ratings;
+}
+
 
 sub get_season_episode {
     my ($pID, $programDetails, $supplementalDetails, $scheduleDetails) = @_;
@@ -2381,58 +2466,7 @@ sub write_programme {
         # Carried forward from audio eval to match DTD
         $w->emptyTag('subtitles', 'type' => 'teletext') if ($audioHasCC);
 
-        # Schedules Direct data can have duplicate ratings for
-        # a body (one in the schedule, one in the program, and
-        # one for the show/series), so we store only the last,
-        # if multiple exist.  We remap the rating agency to the
-        # MythTV standard, as it is as good of a standard as
-        # anything else, and makes importing the data much easier.
-        my $ratings = {};
-        # Supplemental can have generic show ratings
-        if (defined($supplementalDetails->{'contentRating'}))
-          {
-            foreach my $rating(@{$supplementalDetails->{'contentRating'}})
-              {
-                my $body = $rating->{'body'};
-                my $code = $rating->{'code'};
-                ($body, $code) = mapRatingAgency($body, $code);
-                if (defined($body) && defined($code))
-                  {
-                    $ratings->{$body} = $code;
-                  }
-              }
-          }
-        # Programs can have rating for this specific program
-        if (defined($programDetails->{'contentRating'}))
-          {
-            foreach my $rating(@{$programDetails->{'contentRating'}})
-              {
-                my $body = $rating->{'body'};
-                my $code = $rating->{'code'};
-                ($body, $code) = mapRatingAgency($body, $code);
-                if (defined($body) && defined($code))
-                  {
-                    $ratings->{$body} = $code;
-                  }
-              }
-          }
-        # Schedule ratings are for this airing, and may be
-        # different than for the (original) program.  We
-        # overwrite any program ratings with schedule (airing)
-        # ratings if duplicates exist.
-        if (defined($scheduleDetails->{'ratings'}))
-          {
-            foreach my $rating(@{$scheduleDetails->{'ratings'}})
-              {
-                my $body = $rating->{'body'};
-                my $code = $rating->{'code'};
-                ($body, $code) = mapRatingAgency($body, $code);
-                if (defined($body) && defined($code))
-                  {
-                    $ratings->{$body} = $code;
-                  }
-              }
-          }
+        my $ratings = get_ratings($supplementalDetails, $programDetails, $scheduleDetails);
         # Write out the the collected ratings
         my $cro = get_content_rating_order();
         if ($cro) {
