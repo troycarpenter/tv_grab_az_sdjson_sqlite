@@ -271,7 +271,7 @@ my %catmap_minor = (
       preferredmethod => 'allatonce',
       version => "$SCRIPT_VERSION",
       description => 'Multinational (Schedules Direct JSON web services with SQLite DB)',
-      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s channel-exclude-regex=s use-category-for-keyword! update-description-with-all! update-description-with-credits! update-description-with-categories! update-description-with-year! update-description-with-season-episode! update-description-with-icons! update-description-with-icons-basic! update-description-with-icons-entity! update-description-with-premiere! update-description-with-live! update-description-with-advisory! update-description-with-artwork! update-description-with-stars! update-previously-shown-with-year! content-rating-order=s passwordhash=s/],
+      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s channel-exclude-regex=s use-category-for-keyword! update-description-with-all! update-description-with-credits! update-description-with-categories! update-description-with-year! update-description-with-season-episode! update-description-with-icons! update-description-with-icons-basic! update-description-with-icons-entity! update-description-with-premiere! update-description-with-live! update-description-with-advisory! update-description-with-artwork! update-description-with-stars! update-description-with-rating! update-previously-shown-with-year! content-rating-order=s passwordhash=s/],
       defaults => { days => 30 },
     }
   );
@@ -1616,7 +1616,7 @@ sub get_artwork_image {
 }
 
 sub get_desc {
-    my ($desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails) = @_;
+    my ($desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails, $ratings) = @_;
     return $desc unless $desc;
 
     if (get_option_update_description_xx('update-description-with-stars') && defined($programDetails->{'movie'}->{'qualityRating'})) {
@@ -1632,6 +1632,32 @@ sub get_desc {
             }
         }
         $desc = "$stars. $desc" if ($stars);
+    }
+
+    if (get_option_update_description_xx('update-description-with-rating') && $ratings) {
+        my $r;
+        my $cro = get_content_rating_order();
+        if ($cro) {
+            my @cro;
+            push @cro, $_ for (split /,/, $cro);
+            while (!$r and my $pref = shift @cro) {
+                for my $rating(%{$ratings}) {
+                    if ($rating eq $pref) {
+                        $r = $ratings->{$rating};
+                        last;
+                    }
+                }
+            }
+        }
+
+        if (!$r) {
+            for my $rating(sort keys %${ratings}) {
+                $r = $ratings->{$rating};
+                last;
+            }
+        }
+
+        $desc = "($r). $desc" if ($r);
     }
 
     if (get_option_update_description_xx('update-description-with-year') && $year) {
@@ -2215,6 +2241,8 @@ sub write_programme {
             $categories->{$supplementalDetails->{'entityType'}} = $categorynum++ if (!defined($categories->{$supplementalDetails->{'entityType'}}));
         }
 
+        my $ratings = get_ratings($supplementalDetails, $programDetails, $scheduleDetails);
+
         # Choose the "best" (i.e. longer) description if available
         if (defined($programDetails->{'descriptions'}->{'description1000'}))
           {
@@ -2223,7 +2251,7 @@ sub write_programme {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails, $ratings), 'lang' => $lang);
               }
           }
         elsif (defined($programDetails->{'descriptions'}->{'description100'}))
@@ -2233,7 +2261,7 @@ sub write_programme {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails, $ratings), 'lang' => $lang);
               }
           }
         elsif (defined($supplementalDetails->{'descriptions'}->{'description1000'}))
@@ -2243,7 +2271,7 @@ sub write_programme {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails, $ratings), 'lang' => $lang);
               }
           }
         elsif (defined($supplementalDetails->{'descriptions'}->{'description100'}))
@@ -2253,7 +2281,7 @@ sub write_programme {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails, $ratings), 'lang' => $lang);
               }
         }
         print $w2->to_string();
@@ -2466,7 +2494,6 @@ sub write_programme {
         # Carried forward from audio eval to match DTD
         $w->emptyTag('subtitles', 'type' => 'teletext') if ($audioHasCC);
 
-        my $ratings = get_ratings($supplementalDetails, $programDetails, $scheduleDetails);
         # Write out the the collected ratings
         my $cro = get_content_rating_order();
         if ($cro) {
