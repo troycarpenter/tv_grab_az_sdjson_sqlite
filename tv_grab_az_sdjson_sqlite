@@ -271,7 +271,7 @@ my %catmap_minor = (
       preferredmethod => 'allatonce',
       version => "$SCRIPT_VERSION",
       description => 'Multinational (Schedules Direct JSON web services with SQLite DB)',
-      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s channel-exclude-regex=s use-category-for-keyword! update-description-with-all! update-description-with-credits! update-description-with-categories! update-description-with-year! update-description-with-season-episode! update-description-with-icons! update-description-with-icons-basic! update-description-with-icons-entity! update-description-with-premiere! update-description-with-live! update-description-with-advisory! update-description-with-artwork! update-description-with-stars! update-description-with-rating! update-previously-shown-with-year! content-rating-order=s passwordhash=s/],
+      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s channel-exclude-regex=s use-category-for-keyword! update-description-with-all! update-description-with-credits! update-description-with-categories! update-description-with-year! update-description-with-season-episode! update-description-with-icons! update-description-with-icons-basic! update-description-with-icons-entity! update-description-with-premiere! update-description-with-live! update-description-with-advisory! update-description-with-artwork! update-description-with-stars! update-description-with-rating! update-description-with-title! update-previously-shown-with-year! content-rating-order=s passwordhash=s/],
       defaults => { days => 30 },
     }
   );
@@ -1504,6 +1504,13 @@ sub get_title {
       }
     }
 
+sub get_sub_title {
+    my ($r) = @_;
+    my $programDetails = $r->{programDetails};
+    my $supplementalDetails = $r->{supplementalDetails};
+
+    return $programDetails->{episodeTitle150} // $supplementalDetails->{episodeTitle150};
+}
 
 sub output_program {
     my ($w, $r) = @_;
@@ -1616,7 +1623,7 @@ sub get_artwork_image {
 }
 
 sub get_desc {
-    my ($desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails, $ratings) = @_;
+    my ($r, $desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails, $ratings) = @_;
     return $desc unless $desc;
 
     if (get_option_update_description_xx('update-description-with-stars') && defined($programDetails->{'movie'}->{'qualityRating'})) {
@@ -1678,6 +1685,27 @@ sub get_desc {
             $desc = "$str. $desc" if length $str;
         }
     }
+    if (get_option_update_description_xx('update-description-with-title')) {
+        my @str;
+        my $title = get_title($r);
+        my $se = "";
+        $se = sprintf "S%02d", $season_num if $season_num;
+        $se .= sprintf "E%02d", $episode_num if $episode_num;
+        my $sub_title = get_sub_title($r);
+
+        # If no other details then include year. Note, this is fine
+        # for films but not so great for news where the year tends to
+        # be when the programme was created rather than today's episode number.
+        # So we only include it for MV movies.
+        $title .= " ($year)" if $year && (!$sub_title && !$season_num && !$episode_num && $r->{db} && $r->{db}[3] =~ /^MV/);
+        push @str, $title if $title;
+        push @str, $se if $se;
+        push @str, $sub_title if $sub_title;
+
+        my $str = join " - ", @str;
+        $desc = "$str.\n\n$desc" if $str;
+    }
+
     my @prog_details;
     if (get_option_update_description_xx('update-description-with-premiere')) {
         my $is_new = $scheduleDetails->{premiere} // $scheduleDetails->{new};
@@ -2014,14 +2042,8 @@ sub write_programme {
 
     my $title = get_title($r2);
     $w->dataElement('title', $title) if ($title);
-        if (defined($programDetails->{'episodeTitle150'}))
-          {
-            $w->dataElement('sub-title', $programDetails->{'episodeTitle150'});
-          }
-        elsif (defined($supplementalDetails->{'episodeTitle150'}))
-          {
-            $w->dataElement('sub-title', $supplementalDetails->{'episodeTitle150'});
-          }
+    my $sub_title = get_sub_title($r2);
+    $w->dataElement('sub-title', $sub_title) if $sub_title;
         my $w2 = XML::Writer->new(OUTPUT => 'self');
         # XMLTV roles for this program
         my $roles =
@@ -2251,7 +2273,7 @@ sub write_programme {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails, $ratings), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($r2, $desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails, $ratings), 'lang' => $lang);
               }
           }
         elsif (defined($programDetails->{'descriptions'}->{'description100'}))
@@ -2261,7 +2283,7 @@ sub write_programme {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails, $ratings), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($r2, $desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails, $ratings), 'lang' => $lang);
               }
           }
         elsif (defined($supplementalDetails->{'descriptions'}->{'description1000'}))
@@ -2271,7 +2293,7 @@ sub write_programme {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails, $ratings), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($r2, $desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails, $ratings), 'lang' => $lang);
               }
           }
         elsif (defined($supplementalDetails->{'descriptions'}->{'description100'}))
@@ -2281,7 +2303,7 @@ sub write_programme {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails, $ratings), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($r2, $desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails, $ratings), 'lang' => $lang);
               }
         }
         print $w2->to_string();

@@ -1,6 +1,16 @@
 # tv_grab_az_sdjson_sqlite
 XMLTV grabber for Schedules Direct JSON service
 
+This program adds a number of extra features for updating the description with extra information.
+This is useful because many GUIs do not readily display details about programmes such as season
+and episode information or cast information.
+
+Information about artwork is also downloaded and this can also be included in the description
+as URL tags that are displayed by some clients.
+
+See the options --update-description-with-all and --update-description-with-artwork for extra information.
+
+
 Extra Options
 -------------
 
@@ -50,6 +60,9 @@ Some clients allow artwork to be embedded in the description using html image UR
 Add star rating to description.
 * --update-description-with-rating
 Add programme rating in to description.
+* --update-description-with-title
+Include title details inside the description. So the description will include "ProgTitle - S01E02 - Subtitle".
+This is useful for easier recording regex in some programs.
 * --update-previously-shown-with-year
 Movies often have details of the year they were made but some clients expect those details in the previously-shown field.
 
