@@ -1745,9 +1745,10 @@ sub get_desc {
         }
     }
 
+    my $icons = get_option('update-description-with-icons');
     my $basic = get_option('update-description-with-icons-basic');
     my $entity = get_option('update-description-with-icons-entity');
-    if (get_option_update_description_xx('update-description-with-icons') || $basic || $entity) {
+    if ($icons || $basic || $entity) {
         # Some databases default to only a broken utf-8 which only
         # handles basic multiplane characters, not four-byte
         # characters. So have an option to only use basic icons.

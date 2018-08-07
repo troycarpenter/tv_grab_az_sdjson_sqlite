@@ -32,7 +32,7 @@ This is useful since many movies have multiple ratings but many systems only tak
 * --use-category-for-keyword
 Instead of outputting keyword tags, output category tags instead. Useful for programs that cannot parse keywords.
 * --update-description-with-all
-Enable all the below "update-description-with-" options except for --update-description-with-icons-basic, --update-description-with-icons-entity and --update-description-with-artwork.
+Enable all the below "update-description-with-" options except for --update-description-with-icons, --update-description-with-icons-basic, --update-description-with-icons-entity and --update-description-with-artwork.
 * --update-description-with-credits
 Add credits (actors) to description.
 * --update-description-with-categories
