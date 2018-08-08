@@ -2977,26 +2977,26 @@ sub channelWriter
           my $svcid = $c->{serviceID};
           # Log a comment in xmltv file so we can easily find xmltv channels that do not have a name.
           $writer->comment("Only have svcid of $svcid") if !$name && !$callsign && !$channum;
-          $writer->dataElement('display-name', $name, 'lang' => 'en') if ($name ne '');
+          $writer->dataElement('display-name', $name) if ($name ne '');
           # Our channels have a tendency to be called "ABC+1" but SD calls then "ABC +1"
           # (with a space). So output both variants if necessary.
           if ($name =~ / [+]1$/) {
               my $tmpdn = $name;
               $tmpdn =~ s/ [+]1$/+1/;
-              $writer->dataElement('display-name', $tmpdn, 'lang' => 'en') if $tmpdn;
+              $writer->dataElement('display-name', $tmpdn) if $tmpdn;
           } elsif ($name =~ /[+]1$/) {
               my $tmpdn = $name;
               $tmpdn =~ s/[+]1$/ +1/;
-              $writer->dataElement('display-name', $tmpdn, 'lang' => 'en') if $tmpdn;
+              $writer->dataElement('display-name', $tmpdn) if $tmpdn;
           }
           {
               # Some historic European channel names are uppercase only.
               my $tmpdn = uc $name;
-              $writer->dataElement('display-name', $tmpdn, 'lang' => 'en') if ($tmpdn ne $name);
+              $writer->dataElement('display-name', $tmpdn) if ($tmpdn ne $name);
           }
-          $writer->dataElement('display-name', $callsign, 'lang' => 'en') if ($callsign ne '');
-          $writer->dataElement('display-name', $svcid, 'lang' => 'en') if $svcid;
-          $writer->dataElement('display-name', $channum, 'lang' => 'en') if ($channum ne '');
+          $writer->dataElement('display-name', $callsign) if ($callsign ne '');
+          $writer->dataElement('display-name', $svcid) if $svcid;
+          $writer->dataElement('display-name', $channum) if ($channum ne '');
           if (!$name && !$callsign && !$svcid && !$channum) {
             $writer->comment(Dumper $s);
             $writer->comment(Dumper $c);
@@ -3116,7 +3116,7 @@ sub listLineups
           $w->startTag('xmltv-lineup', 'id' => $id );
             my $type = mapTransport($l->[2]);
             $w->dataElement('type', $type);
-            $w->dataElement('display-name', $lineupDesc, 'lang' => 'en');
+            $w->dataElement('display-name', $lineupDesc);
           $w->endTag('xmltv-lineup');
         }
 
@@ -3251,7 +3251,7 @@ sub getLineup
         my $SDtype = $l->[2] || 'Unknown';
         my $type = mapTransport($l->[2]);
         $w->dataElement('type', $type);
-        $w->dataElement('display-name', $lineupDesc, 'lang' => 'en');
+        $w->dataElement('display-name', $lineupDesc);
 
           #
           # Process each channel/station in the lineup
@@ -3323,13 +3323,13 @@ sub getLineup
 
                 $w->startTag('station', 'rfc2838' => generateRFC2838($sID) );
 
-                  $w->dataElement('name', $s->{'name'}, 'lang' => 'en');
+                  $w->dataElement('name', $s->{'name'});
 
                   if (($SDtype eq 'Cable') || ($SDtype eq 'Antenna'))
                     {
                       if (defined($s->{'callsign'}))
                         {
-                          $w->dataElement('short-name', $s->{'callsign'}, 'lang' => 'en');
+                          $w->dataElement('short-name', $s->{'callsign'});
                         }
                     }
 
@@ -5258,7 +5258,15 @@ sub manageLineups
             my @choices = ();
             for my $l (@{$lineups})
               {
-                my $desc = "$l->{'name'} ($l->{'transport'} $l->{'location'})";
+                my $desc = '';
+                if (defined($l->{'isDeleted'}) && $l->{'isDeleted'})
+                  {
+                    $desc = "DELETED LINEUP";
+                  }
+                else
+                  {
+                    $desc = "$l->{'name'} ($l->{'transport'} $l->{'location'})";
+                  }
                 push (@choices, [ $l->{'lineup'}, sprintf("%-20s %s", $l->{'lineup'}, $desc) ]);;
               }
 
@@ -6207,7 +6215,7 @@ use feature ':5.16';
 
 use strict;
 use warnings FATAL => 'all';
-use warnings NONFATAL => qw(exec recursion internal malloc newline experimental deprecated portable);
+use warnings NONFATAL => qw(exec recursion internal malloc newline deprecated portable);
 no warnings 'once';
 
 use Carp;
