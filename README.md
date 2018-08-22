@@ -88,7 +88,7 @@ Some clients allow artwork to be embedded in the description using html image UR
 * --update-description-with-stars
 Add star rating to description.
 * --update-description-with-rating
-Add programme rating in to description.
+Add programme age rating in to description. For example "TV-PG".
 * --update-description-with-title
 Include title details inside the description. So the description will include "ProgTitle - S01E02 - Subtitle".
 This is useful for easier recording regex in some programs.
