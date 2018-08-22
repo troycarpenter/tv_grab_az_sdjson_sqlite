@@ -10,6 +10,9 @@ as URL tags that are displayed by some clients.
 
 See the options --update-description-with-all and --update-description-with-artwork for extra information.
 
+Many of the options can be prefixed with "no-" in order to disable them, such as
+"--update-all --no-update-description-with-premiere --no-update-description-with-live"
+
 Abbreviated samples of descriptions are given below for a movie and a tv programme episode.
 
 ====
@@ -117,3 +120,25 @@ A list of extra (potentially non-standard) packages you may need to install is b
 - XMLTV
 
 The other modules used are typically already installed as part of xmltv.
+
+Miscellaneous Information
+-------------------------
+
+In Kodi, to view the star rating you may have to change the font to "Arial Based"
+in Settings/Interface Settings/Skin/Fonts, otherwise it may appear as square
+blocks instead of stars.
+
+The airdate may be incorrect for your country since it tends to be the
+first worldwide airdate.
+
+Total number of seasons is known to be sometimes incorrect when a new
+series is released.
+
+Programmes marked as "new/premiere" are based on information provided
+to Schedules Direct by the networks.  So, a movie may be "new" because
+it's the first time a network has purchased the rights to show the
+movie.  This means a movie from 1970 may be marked as "new" on one
+network but could be a "repeat" on a different network. Similarly,
+some networks mark programmes as "new" based on the timeslot.  So a
+programme could be "new" at 9pm and the same episode could also be
+"new" the following day at 2am.
