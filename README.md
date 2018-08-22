@@ -10,14 +10,42 @@ as URL tags that are displayed by some clients.
 
 See the options --update-description-with-all and --update-description-with-artwork for extra information.
 
+Abbreviated samples of descriptions are given below for a movie and a tv programme episode.
+
+====
+
+Rambo: First Blood (1982).
+
+(1982). (R). ☆☆☆. Vietnam veteran...
+
+Advisory: Adult Language, Adult Situations, Brief Nudity, Graphic Violence.
+
+Cast: Sylvester Stallone, Richard Crenna...
+
+Categories: Action, Feature Film, Movie.
+
+====
+
+How I Met Your Mother - S03E16 - Sandcastles in the Sand.
+
+S3/9 E16/20. (2008-04-21). (TV-PG). Robin rekindles...
+
+Cast: Josh Radnor, Jason Segel...
+
+Categories: Episode, Series, Show, Sitcom.
+
+====
+
 
 Extra Options
 -------------
 
 * --merge-split=n
 Movies that are split in to two segments by news programmes will be automatically merged if the news is <=_n_ minutes long.
+An example is "--merge-split=5" to remove programmes that are only five minutes long if they programmes either side have the same title.
 * --artwork-max-width=n
 Prefer artwork with a width no larger than _n_. If no artwork exists at that size then larger artwork may be used.
+An example is "--artwork-max-width-720".
 * --channel-regex=regex and ---channel-exclude-regex=regex
 When outputting xmltv file, only output details for channels matching/not matching the _regex_. This allows the user to run the grabber multiple times and output extra days for important channels.
 * --no-download
@@ -29,6 +57,7 @@ Erase schedules from DB and force a complete download of data.
 * --content-rating-order=s
 Use a specific content rating order based on rating agency. For example "MPAA,VCHIP" will prefer those to all other rating systems.
 This is useful since many movies have multiple ratings but many systems only take the first content rating.
+The default is based on US ratings, with fallbacks to other countries.
 * --use-category-for-keyword
 Instead of outputting keyword tags, output category tags instead. Useful for programs that cannot parse keywords.
 * --update-description-with-all
