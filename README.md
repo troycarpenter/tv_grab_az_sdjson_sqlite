@@ -102,3 +102,18 @@ Extra Supported Tags and Features
 * Download artwork for programmes.
 * Support multiple xmltv episode number formats include series/ and episode/ formats.
 * Tag new showings as premiere so they can be recorded in tvheadend.
+
+Extra Packages Required
+-----------------------
+A list of extra (potentially non-standard) packages you may need to install is below:
+
+- DateTime::Format::SQLite
+- DBD::SQLite
+- File::Homedir
+- JSON
+- JSON::XS
+- LWP::Protocols::HTTPS
+- LWP::UserAgent::Determined
+- XMLTV
+
+The other modules used are typically already installed as part of xmltv.
