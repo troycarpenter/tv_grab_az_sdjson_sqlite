@@ -1545,6 +1545,18 @@ sub output_program {
                                    })
     }
 
+    # Shortcut clones if we have no programmes and we are not a movie
+    # then we can output immediately and move on to next programme.
+    if (!$prog1) {
+        my $pID = $r->[3];
+        if ($pID !~ /^MV/) {
+            # Not a movie and no shuffle, so let's output this one.
+            return write_programme($w, { db => $r,
+                                         stationDetails => $stationDetails,
+                                         });
+        }
+    }
+
     my $programDetails = $JSON->decode($r->[5]) if defined($r->[5]);
     my $supplementalDetails = $JSON->decode($r->[9]) if defined($r->[9]);
 
