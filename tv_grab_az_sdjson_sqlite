@@ -8153,7 +8153,7 @@ sub getEpisodeImageFromArtwork
       # we allow any category of image.
       for my $minWidth (900, 400, 200, 0) {
           for my $d (@{$art->{data}}) {
-              next unless $d && $d->{category};
+              next unless $d;
               my $imgWidth = $d->{width};
               # If we're size 0 it means we couldn't find a decent
               # image so use any other images we can find such as
@@ -8166,21 +8166,24 @@ sub getEpisodeImageFromArtwork
               # Otherwise we're looking for a good high quality image.
               if (!$canUseImage) {
                   # https://github.com/SchedulesDirect/JSON-Service/wiki/API-20141201#field-meanings
-                  my $category = $d->{category};
-                  $canUseImage = $imgWidth > $minWidth &&
-                    $imgWidth < $maxWidth &&
-                    ($category eq 'Poster Art' ||
-                     $category eq 'Box Art' ||
-                     $category eq 'VOD Art' ||
-                     $category eq 'Staple' ||
-                     $category =~ 'Banner-L' ||
-                     $category eq 'Logo');
+                  $canUseImage = $imgWidth > $minWidth && $imgWidth < $maxWidth;
+                  if ($canUseImage) {
+                      my $category = $d->{category};
+                      $canUseImage = $category &&
+                        ($category eq 'Poster Art' ||
+                         $category eq 'Box Art' ||
+                         $category eq 'VOD Art' ||
+                         $category eq 'Staple' ||
+                         $category =~ 'Banner-L' ||
+                         $category eq 'Logo');
+                  }
               }
               if ($canUseImage)
                 {
-                    if ($d->{uri})
+                    my $uri = $d->{uri};
+                    if ($uri)
                       {
-                          return ($d->{uri}, $d->{width}, $d->{height});
+                          return ($uri, $imgWidth, $d->{height});
                       }
                 }
           }
