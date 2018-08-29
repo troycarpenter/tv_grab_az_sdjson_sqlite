@@ -2254,11 +2254,17 @@ sub write_programme_details {
     # These may already be decoded earlier and passed to us, in which
     # case use them, otherwise decode from DB details.
     my $programDetails = $r2->{programDetails};
-    $programDetails = $JSON->decode($r->[5]) if !$programDetails && $r->[5];
+    if (!$programDetails && $r->[5]) {
+        $programDetails = $r2->{programDetails} = $JSON->decode($r->[5]);
+    }
     my $stationDetails = $r2->{stationDetails};
-    $stationDetails = $JSON->decode($r->[8]) if !$stationDetails && $r->[8];
+    if (!$stationDetails && $r->[8]) {
+        $stationDetails = $r2->{stationDetails} = $JSON->decode($r->[8]);
+    }
     my $supplementalDetails = $r2->{supplementalDetails};
-    $supplementalDetails = $JSON->decode($r->[9]) if !$supplementalDetails && $r->[9];
+    if (!$supplementalDetails && $r->[9]) {
+        $supplementalDetails = $r2->{supplementalDetails} = $JSON->decode($r->[9]);
+    }
       # Note that we should legitmately parse the datetime here, but
       # the performance absolutely sucks, so we let sqlite do this
       # my $startTime = DateTime::Format::SQLite->parse_datetime($r->[1]);
