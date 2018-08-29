@@ -1713,7 +1713,7 @@ sub cache_generate_key {
     my $supArtDetails = $r->[11] // "No sup art";
     my $programHash = $r->[12] // "No prog hash";
     my $supplementalHash = $r->[13] // "No sup hash";
-    return sha1_hex( join ":.",
+    return sha1_hex( join ":",
                      $sID,
                      $start,
                      $stop,
@@ -1721,8 +1721,12 @@ sub cache_generate_key {
                      $pID,
                      $programHash,
                      $supplementalHash,
-                     $artDetails,
-                     $supArtDetails,
+                     # Only substr since artwork details can be around
+                     # 4k and takes time to sha1. We skip a bit in the
+                     # string since the start is always JSON standard
+                     # text.
+                     substr($artDetails, 10, 20),
+                     substr($supArtDetails, 10, 20),
                    );
 }
 
