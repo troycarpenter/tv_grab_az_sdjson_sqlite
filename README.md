@@ -1,5 +1,5 @@
 # tv_grab_az_sdjson_sqlite
-XMLTV grabber for Schedules Direct JSON service
+XMLTV grabber for Schedules Direct JSON service with local caching of xmltv output.
 
 This program adds a number of extra features for updating the description with extra information.
 This is useful because many GUIs do not readily display details about programmes such as season
@@ -38,6 +38,53 @@ Cast: Josh Radnor, Jason Segel...
 Categories: Episode, Series, Show, Sitcom.
 
 ====
+
+
+
+Local Caching of Formatted Data
+-------------------------------
+
+Local caching of formatted programme data can be enabled.
+This will cache xmltv output to a local server such as to Redis.
+The sqlite database (containing details of downloaded data)
+is separate from the xmltv-output formatted caching done
+with redis.
+
+This significantly reduces the time taken for subsequent runs when
+fetching multiple days of listings.  To enable this you will need the
+Perl module "CHI" and "CHI::Driver::Redis" and a working Redis server
+running locally.
+
+The cache can then be used via the extra arguments:
+"--cache-driver=Redis"
+
+The first time the programme is run, the formatted output is cached.
+On the second and subsequent runs, the cache is checked, and if the
+formatted output is cached, then it is retrieved.
+
+With multiple days and hundreds of channels, this can significantly
+reduce overhead. On my test system, it reduced the run time from 134
+seconds to 14 seconds.
+
+To check that caching is occurring, you can use "redis-cli stat"
+to monitor keys/memory usage of the redis server. The server
+must have enough space to hold the cached data (maxmemory setting
+in the redis server's redis.conf).
+
+* --cache-driver
+Currently only "Redis" is tested and needs the extra Perl modules
+installed.
+* --cache-namespace-extra
+Extra text to use when generating a cache namespace.  This is used if
+you run the programme multiple times and alter options that affect the
+generated output. For example if you run it with
+--update-description-with-icons on one run, and with
+--no-update-description-with-icons on a second run then you should specify
+a different caching namespace to avoid retrieving incorrect programme details.
+* --cache-expiry
+String specifying expiry to use. By default the cached programme data expires
+after a few days to recover space and ensure listings are regenerated.
+An example would be "--cache-expiry='10 days'"
 
 
 Extra Options
@@ -118,6 +165,11 @@ A list of extra (potentially non-standard) packages you may need to install is b
 - LWP::Protocols::HTTPS
 - LWP::UserAgent::Determined
 - XMLTV
+
+For local (advanced) caching you also need:
+- CHI (libchi-perl)
+- CHI::Driver::Redis (libchi-driver-redis-perl)
+- A redis-server running on the local machine (redis-server)
 
 The other modules used are typically already installed as part of xmltv.
 

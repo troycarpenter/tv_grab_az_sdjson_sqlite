@@ -128,7 +128,7 @@ use Data::Dumper;
 my $RFC2838_COMPLIANT          = 1;            # RFC2838 compliant station ids, which makes XMLTV
                                                # validate even though the docs say "SHOULD" not "MUST"
 
-my $SCRIPT_VERSION             = '$Id: tv_grab_az_sdjson_sqlite,v 1.35 3976d0 2018/08/10 01:19:00 gtb Exp ed $';
+my $SCRIPT_VERSION             = '$Id: tv_grab_az_sdjson_sqlite,v 1.36 3976d0 2018/08/29 01:19:00 gtb Exp ed $';
 my $SCRIPT_URL                 = 'https://github.com/azlm8t/tv_grab_zz_sdjson_sqlite';
 my $SCRIPT_NAME                = basename("$0");
 my $SCRIPT_NAME_DIR            = dirname("$0");
@@ -271,7 +271,7 @@ my %catmap_minor = (
       preferredmethod => 'allatonce',
       version => "$SCRIPT_VERSION",
       description => 'Multinational (Schedules Direct JSON web services with SQLite DB)',
-      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s channel-exclude-regex=s use-category-for-keyword! update-description-with-all! update-description-with-credits! update-description-with-categories! update-description-with-year! update-description-with-season-episode! update-description-with-icons! update-description-with-icons-basic! update-description-with-icons-entity! update-description-with-premiere! update-description-with-live! update-description-with-advisory! update-description-with-artwork! update-description-with-stars! update-description-with-rating! update-description-with-title! update-previously-shown-with-year! content-rating-order=s passwordhash=s/],
+      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s channel-exclude-regex=s use-category-for-keyword! update-description-with-all! update-description-with-credits! update-description-with-categories! update-description-with-year! update-description-with-season-episode! update-description-with-icons! update-description-with-icons-basic! update-description-with-icons-entity! update-description-with-premiere! update-description-with-live! update-description-with-advisory! update-description-with-artwork! update-description-with-stars! update-description-with-rating! update-description-with-title! update-previously-shown-with-year! content-rating-order=s passwordhash=s cache-driver=s cache-namespace-extra=s cache-expiry=s/],
       defaults => { days => 30 },
     }
   );
@@ -1434,7 +1434,7 @@ sub programWriter {
   # it is a necessary compromise
   #
 
-  my $sql = "select schedules.station, schedules.starttime, schedules.duration, schedules.program, schedules.details, programs.details, strftime('%Y%m%d%H%M%S', schedules.starttime), strftime('%Y%m%d%H%M%S', datetime(schedules.starttime, '+' || schedules.duration || ' seconds')), stations.details, supplemental.details, artwork.details, supart.details from schedules as schedules left join programs as programs on programs.program = schedules.program left join stations as stations on stations.station = schedules.station left join programs as supplemental on programs.program_supplemental = supplemental.program left join artwork as artwork on programs.program = artwork.program left join artwork as supart on programs.program_supplemental = supart.program where schedules.station in (select distinct stations.station from stations as stations where stations.station in ( select distinct channels.station from channels as channels where channels.lineup = ? and channels.selected = 1)) AND schedules.day >= ? and schedules.day < ? order by schedules.station, schedules.starttime";
+  my $sql = "select schedules.station, schedules.starttime, schedules.duration, schedules.program, schedules.details, programs.details, strftime('%Y%m%d%H%M%S', schedules.starttime), strftime('%Y%m%d%H%M%S', datetime(schedules.starttime, '+' || schedules.duration || ' seconds')), stations.details, supplemental.details, artwork.details, supart.details, programs.hash as prog_hash, supplemental.hash as sup_hash from schedules as schedules left join programs as programs on programs.program = schedules.program left join stations as stations on stations.station = schedules.station left join programs as supplemental on programs.program_supplemental = supplemental.program left join artwork as artwork on programs.program = artwork.program left join artwork as supart on programs.program_supplemental = supart.program where schedules.station in (select distinct stations.station from stations as stations where stations.station in ( select distinct channels.station from channels as channels where channels.lineup = ? and channels.selected = 1)) AND schedules.day >= ? and schedules.day < ? order by schedules.station, schedules.starttime";
 
   my $sth = $DBH->prepare_cached($sql);
   if (!defined($sth))
@@ -1461,6 +1461,7 @@ sub programWriter {
       exit(1)
     }
 
+  # Nb: 1-based not 0-based.
   $sth->bind_col( 1, undef, SQL_VARCHAR );
   $sth->bind_col( 2, undef, SQL_DATETIME );
   $sth->bind_col( 3, undef, SQL_INTEGER );
@@ -1473,6 +1474,8 @@ sub programWriter {
   $sth->bind_col(10, undef, SQL_VARCHAR );
   $sth->bind_col(11, undef, SQL_VARCHAR );
   $sth->bind_col(12, undef, SQL_VARCHAR );
+  $sth->bind_col(13, undef, SQL_VARCHAR ); # prog_hash
+  $sth->bind_col(14, undef, SQL_VARCHAR ); # sup_hash
 
   my $programsWritten = 0;
 
@@ -1577,6 +1580,115 @@ sub output_program {
     undef $prog2;
     undef $prog3;
     return print_and_shuffle_programmes($w);
+}
+
+sub get_cache_namespace {
+    state $cache_ns;
+    return $cache_ns if $cache_ns;
+
+    # When our script changes, change namespace in case we have fixed
+    # bugs.
+    my $ns = "$SCRIPT_VERSION";
+    # Allow user to specify additional namespaces, for example if
+    # script is run with different options for different PVRs.
+    my $user_ns = get_option('cache-namespace-extra');
+    $ns .= $user_ns if $user_ns;
+
+    # Then shrink it all down.
+    $ns = sha1_hex($ns);
+
+    # We append EUID to ensure we also get a different cache per user.
+    $ns .= ".$>";
+
+    return $cache_ns = $ns;
+}
+
+sub get_cache_object {
+    state $cache;
+    return $cache if $cache;
+
+    state $driver = get_option('cache-driver'); # E.g., "Redis" (with capital "R").
+    return unless $driver;
+
+    # Only require the CHI if user has specified a cache.
+    # This avoids majority of users having to install it and
+    # not use it.
+    require CHI;
+    $cache = CHI->new(driver => $driver,
+                      namespace => get_cache_namespace,
+                      # We want the backend caching server to
+                      # expire data even if we are not run.
+                      expires_on_backend => 1,
+                      compress_threshold => 1024 * 100,
+                      # No point having an l1 cache since we currently
+                      # cache data effectively by (station,start,stop) due to
+                      # programmes having varying data such as "premiere".
+                      #
+                      # l1_cache => {
+                      #              driver => 'Memory', global => 1, max_size => 1024 * 1024 * 20
+                      #             },
+                     );
+    return $cache;
+}
+
+sub is_cache_enabled {
+    state $is_enabled = get_cache_object();
+    return $is_enabled;
+}
+
+sub cache_set {
+    my ($key, $value_ref, $optional_timeout) = @_;
+    # We ttl all cache entries to ensure old data eventually
+    # disappears without user having to do anything.
+    $optional_timeout = get_option('cache-expiry') // '+ 5 days' unless $optional_timeout;
+    $optional_timeout = '+ 30 s' if $debug;
+    print STDERR "Setting cache $key for $optional_timeout\n" if $debug;
+    get_cache_object->set($key, $value_ref, $optional_timeout);
+    if ($debug) {
+        my $check = cache_get($key);
+        if ($check ne $$value_ref) {
+            die "Failed check", "check=", Dumper $check, "Orig=", Dumper $$value_ref;
+        }
+    }
+}
+
+sub cache_get_ref {
+    my ($key) = @_;
+    print STDERR "Getting cache $key\n" if $debug;
+    return get_cache_object->get($key);
+}
+
+# Cache returns references to strings, so this is a convenience
+# function for returning the string itself.
+sub cache_get {
+    my $ret = cache_get_ref(@_);
+    return ref $ret ? $$ret : undef;
+}
+
+sub cache_generate_key {
+    my ($r2) = @_;
+    my $r = $r2->{db};
+
+    my $sID = $r->[0] // "No station id"; # To ensure same programme on different channels don't get mixed up.
+    my $pID = $r->[3] // "No prog id";
+    my $start = $r->[6]; # For "premiere" instead of using schedDetails which is long.
+    my $stop = $r->[7];
+    # my $stationDetails = $r->[8] // "No station details";
+    my $artDetails = $r->[10] // "No art details";
+    my $supArtDetails = $r->[11] // "No sup art";
+    my $programHash = $r->[12] // "No prog hash";
+    my $supplementalHash = $r->[13] // "No sup hash";
+    return sha1_hex( join ":.",
+                     $sID,
+                     $start,
+                     $stop,
+                     # $stationDetails, # Assume station doesn't change from radio to tv so don't cache.
+                     $pID,
+                     $programHash,
+                     $supplementalHash,
+                     $artDetails,
+                     $supArtDetails,
+                   );
 }
 
 sub print_and_shuffle_programmes {
@@ -2014,13 +2126,64 @@ sub get_content_advisory {
     return $advisories;
 }
 
+sub write_programme_i {
+    my ($w, $r2) = @_;
+    my $r = $r2->{db};
+    my $sID = $r->[0];
+
+    $w->startTag('programme', 'channel' => generateRFC2838($sID),
+                 'start'   => "$r->[6] +0000",
+                 'stop'    => "$r->[7] +0000");
+
+    write_programme_details($w, $r2);
+    $w->endTag('programme');
+}
+
 sub write_programme {
     my ($w, $r2) = @_;
+
+    if (!is_cache_enabled) {
+        # Bypass caching logic to avoid overhead of generating keys,
+        # etc.
+        return write_programme_i($w, $r2);
+    }
+
+    my $key = cache_generate_key($r2);
+    my $cached_value = cache_get($key);
+    if ($cached_value) {
+        # Pop the key in to the output so we know
+        # when we have retrieved from cache.
+        $w->comment($key);
+        # We should use "raw", but we'll just print
+        # directly for (a) speed and (b) to allow debug
+        # checking of rest of xml writer (which is not
+        # allowed with raw).
+        # $w->raw($cached_value);
+        print $cached_value;
+        # One more programme printed.
+        return 1;
+    }
+
+    my $cache_prog = XML::Writer->new(OUTPUT => 'self',
+                                      ENCODING => 'UTF-8',
+                                      DATA_MODE => 1,
+                                      DATA_INDENT => 1,
+                                      UNSAFE => (!$debug)
+                                     );
+    my $ret = write_programme_i($cache_prog, $r2);
+    my $out = $cache_prog->to_string();
+    $w->raw($out) if $out;
+    cache_set($key, \$out) if $out;
+    return $ret;
+}
+
+sub write_programme_details {
+    my ($w, $r2) = @_;
+    my $r = $r2->{db};
+
     my $programDetails = $r2->{programDetails};
     my $stationDetails = $r2->{stationDetails};
     my $supplementalDetails = $r2->{supplementalDetails};
-    my $r = $r2->{db};
-      my $sID = $r->[0];
       # Note that we should legitmately parse the datetime here, but
       # the performance absolutely sucks, so we let sqlite do this
       # my $startTime = DateTime::Format::SQLite->parse_datetime($r->[1]);
@@ -2037,15 +2200,15 @@ sub write_programme {
         {
           $supArt = $JSON->decode($r->[11]);
         }
-      $w->startTag('programme', 'channel' => generateRFC2838($sID),
-                                'start'   => "$r->[6] +0000",
-                                'stop'    => "$r->[7] +0000");
-
     my $title = get_title($r2);
     $w->dataElement('title', $title) if ($title);
     my $sub_title = get_sub_title($r2);
     $w->dataElement('sub-title', $sub_title) if $sub_title;
-        my $w2 = XML::Writer->new(OUTPUT => 'self');
+    my $w2 = XML::Writer->new(OUTPUT => 'self',
+                              ENCODING => 'UTF-8',
+                              DATA_MODE => 1,
+                              DATA_INDENT => 1,
+                              UNSAFE => (!$debug));
         # XMLTV roles for this program
         my $roles =
           {
@@ -2307,7 +2470,7 @@ sub write_programme {
                 $w->dataElement('desc', get_desc($r2, $desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails, $ratings), 'lang' => $lang);
               }
         }
-        print $w2->to_string();
+        $w->raw($w2->to_string());
 	$w->dataElement('date', $year) if $year;
         $w->dataElement('category', $mythtv_category) if $mythtv_category;
         foreach my $category (sort {$categories->{$a} <=> $categories->{$b}} (keys %{$categories}))
@@ -2605,7 +2768,6 @@ sub write_programme {
               $w->dataElement('value', $starRatings->{$body});
             $w->endTag('star-rating');
           }
-      $w->endTag('programme');
     }
     return 1;
 }
