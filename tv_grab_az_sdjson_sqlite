@@ -1436,7 +1436,19 @@ sub programWriter {
   # it is a necessary compromise
   #
 
-  my $sql = "select schedules.station, schedules.starttime, schedules.duration, schedules.program, schedules.details, programs.details, strftime('%Y%m%d%H%M%S', schedules.starttime), strftime('%Y%m%d%H%M%S', datetime(schedules.starttime, '+' || schedules.duration || ' seconds')), stations.details, supplemental.details, artwork.details, supart.details, programs.hash as prog_hash, supplemental.hash as sup_hash from schedules as schedules left join programs as programs on programs.program = schedules.program left join stations as stations on stations.station = schedules.station left join programs as supplemental on programs.program_supplemental = supplemental.program left join artwork as artwork on programs.program = artwork.program left join artwork as supart on programs.program_supplemental = supart.program where schedules.station in (select distinct stations.station from stations as stations where stations.station in ( select distinct channels.station from channels as channels where channels.lineup = ? and channels.selected = 1)) AND schedules.day >= ? and schedules.day < ? order by schedules.station, schedules.starttime";
+  my $sql = "select schedules.station, schedules.starttime, schedules.duration, schedules.program, schedules.details, programs.details, strftime('%Y%m%d%H%M%S', schedules.starttime), strftime('%Y%m%d%H%M%S', datetime(schedules.starttime, '+' || schedules.duration || ' seconds')), stations.details, supplemental.details, NULL, NULL, programs.hash as prog_hash, supplemental.hash as sup_hash, programs.program_supplemental
+
+from
+schedules as schedules left join programs as programs on programs.program = schedules.program
+left join stations as stations on stations.station = schedules.station
+left join programs as supplemental on programs.program_supplemental = supplemental.program
+
+where
+schedules.station in (select distinct stations.station from stations as stations where stations.station in ( select distinct channels.station from channels as channels where channels.lineup = ? and channels.selected = 1))
+AND schedules.day >= ?
+and schedules.day < ?
+
+order by schedules.station, schedules.starttime";
 
   my $sth = $DBH->prepare_cached($sql);
   if (!defined($sth))
@@ -1470,7 +1482,8 @@ sub programWriter {
       $prog_details, $sched_starttime_str, $sched_endtime,
       $stat_details, $sup_details,
       $art_details, $supart_details,
-      $prog_hash, $sup_hash);
+      $prog_hash, $sup_hash,
+      $sup_id);
   # Nb: 1-based not 0-based.
   $sth->bind_col( 1, \$sched_station, SQL_VARCHAR );
   $sth->bind_col( 2, \$sched_starttime, SQL_DATETIME );
@@ -1482,10 +1495,11 @@ sub programWriter {
   $sth->bind_col( 8, \$sched_endtime, SQL_VARCHAR );
   $sth->bind_col( 9, \$stat_details, SQL_VARCHAR );
   $sth->bind_col(10, \$sup_details, SQL_VARCHAR );
-  $sth->bind_col(11, \$art_details, SQL_VARCHAR );
-  $sth->bind_col(12, \$supart_details, SQL_VARCHAR );
-  $sth->bind_col(13, \$prog_hash, SQL_VARCHAR ); # prog_hash
-  $sth->bind_col(14, \$sup_hash, SQL_VARCHAR ); # sup_hash
+  $sth->bind_col(11, \$art_details, SQL_VARCHAR ); # No longer used (NULL)
+  $sth->bind_col(12, \$supart_details, SQL_VARCHAR ); # No longer used (NULL)
+  $sth->bind_col(13, \$prog_hash, SQL_VARCHAR );
+  $sth->bind_col(14, \$sup_hash, SQL_VARCHAR );
+  $sth->bind_col(15, \$sup_id, SQL_VARCHAR );
 
   my $programsWritten = 0;
 
@@ -1495,7 +1509,8 @@ sub programWriter {
                                           $prog_details, $sched_starttime_str, $sched_endtime,
                                           $stat_details, $sup_details,
                                           $art_details, $supart_details,
-                                          $prog_hash, $sup_hash
+                                          $prog_hash, $sup_hash,
+                                          $sup_id,
                                          ]
                                         );
   }
@@ -1523,6 +1538,7 @@ sub get_title {
             return $title->{title120} if defined $title->{title120};
       }
     }
+}
 
 sub get_sub_title {
     my ($r) = @_;
@@ -1794,6 +1810,29 @@ sub get_artwork_image {
         return ($artURI, $width, $height);
     }
     return undef;
+}
+
+sub get_json_artwork_for_progid {
+    my ($progid) = @_;
+    # Sqlite allows us to execute a statement even during a fetch.
+    # "Portable applications should not assume [this]" (DBI).
+    state $sql = "select details from artwork where program = ?";
+    state $sth = $DBH->prepare_cached($sql);
+    $sth->bind_param(1, $progid);
+    $sth->execute();
+    $sth->bind_col( 1, undef, SQL_VARCHAR );
+    if (my @row = $sth->fetchrow_array) {
+        return $row[0];
+    }
+    return undef;
+}
+
+# Fetch and JSON decode artwork for the progid.
+sub get_decoded_artwork_for_progid {
+    my ($progid) = @_;
+    my $json_art = get_json_artwork_for_progid($progid);
+    return unless $json_art;
+    return $JSON->decode($json_art);
 }
 
 sub get_desc {
@@ -2271,16 +2310,14 @@ sub write_programme_details {
       # my $endTime = $startTime->clone()->add(seconds => $r->[2]);
       my $pID = $r->[3];
       my $scheduleDetails = $JSON->decode($r->[4]);
-      my $artwork;
-      if (defined($r->[10]))
-        {
-          $artwork = $JSON->decode($r->[10]);
-        }
-      my $supArt;
-      if (defined($r->[11]))
-        {
-          $supArt = $JSON->decode($r->[11]);
-        }
+
+    # We fetch artwork from the DB separately. We used
+    # to fetch it all in one SQL, but the artwork JSON
+    # is large and is unnecessary to fetch if we have
+    # caching enabled and shortcut all this writing logic.
+    my $artwork = get_decoded_artwork_for_progid($pID);
+    my $supID = $r->[14];
+    my $supArt = get_decoded_artwork_for_progid($supID);
     my $title = get_title($r2);
     $w->dataElement('title', $title) if ($title);
     my $sub_title = get_sub_title($r2);
@@ -2848,8 +2885,7 @@ sub write_programme_details {
             $w->startTag('star-rating', 'system' => $body);
               $w->dataElement('value', $starRatings->{$body});
             $w->endTag('star-rating');
-          }
-    }
+        }
     return 1;
 }
 
