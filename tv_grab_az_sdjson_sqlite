@@ -1525,20 +1525,28 @@ sub output_program {
                                            on_error => 'croak',
                                                  );
     state $merge_split = $opt->{'merge-split'} // $conf->{'merge-split'};
-    my $stationDetails = $JSON->decode($r->[8]) if defined $r->[8];
-    if ($stationDetails && $stationDetails->{name}) {
-        return 0 if $channelRegex        && $stationDetails->{name} !~ $channelRegex;
-        return 0 if $channelExcludeRegex && $stationDetails->{name} =~ $channelExcludeRegex;
+    my $stationDetails;
+
+    # Shortcut decode logic (if possible) if user hasn't given regex.
+    $stationDetails = $JSON->decode($r->[8]) if (($channelRegex || $channelExcludeRegex) && defined $r->[8]);
+
+    if ($channelRegex && $stationDetails) {
+        return 0 if $stationDetails->{name} !~ $channelRegex;
     }
-    my $programDetails = $JSON->decode($r->[5]) if defined($r->[5]);
-    my $supplementalDetails = $JSON->decode($r->[9]) if defined($r->[9]);
+
+    if ($channelExcludeRegex && $stationDetails) {
+        return 0 if $stationDetails->{name} =~ $channelExcludeRegex;
+    }
 
     # Shortcut logic if we are not merging programmes.
     if (!$merge_split) {
-        return write_programme($w, { db => $r, programDetails => $programDetails,
+        return write_programme($w, { db => $r,
                                      stationDetails => $stationDetails,
-                                     supplementalDetails => $supplementalDetails })
+                                   })
     }
+
+    my $programDetails = $JSON->decode($r->[5]) if defined($r->[5]);
+    my $supplementalDetails = $JSON->decode($r->[9]) if defined($r->[9]);
 
     my $r2 = { db => dclone($r), # Need a deep clone otherwise all entries point to the same thing.
                programDetails => $programDetails,
@@ -2191,9 +2199,14 @@ sub write_programme_details {
     my ($w, $r2) = @_;
     my $r = $r2->{db};
 
+    # These may already be decoded earlier and passed to us, in which
+    # case use them, otherwise decode from DB details.
     my $programDetails = $r2->{programDetails};
+    $programDetails = $JSON->decode($r->[5]) if !$programDetails && $r->[5];
     my $stationDetails = $r2->{stationDetails};
+    $stationDetails = $JSON->decode($r->[8]) if !$stationDetails && $r->[8];
     my $supplementalDetails = $r2->{supplementalDetails};
+    $supplementalDetails = $JSON->decode($r->[9]) if !$supplementalDetails && $r->[9];
       # Note that we should legitmately parse the datetime here, but
       # the performance absolutely sucks, so we let sqlite do this
       # my $startTime = DateTime::Format::SQLite->parse_datetime($r->[1]);
