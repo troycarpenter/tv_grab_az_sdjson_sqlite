@@ -1725,8 +1725,10 @@ sub cache_generate_key {
                      # 4k and takes time to sha1. We skip a bit in the
                      # string since the start is always JSON standard
                      # text.
-                     substr($artDetails, 10, 20),
-                     substr($supArtDetails, 10, 20),
+                     # Have to do the checks since we run with extra checking
+                     # which throws error if substr is out of range.
+                     $artDetails && length($artDetails) > 50 ? substr($artDetails, 10, 20) : $artDetails,
+                     $supArtDetails && length($supArtDetails) > 50 ? substr($supArtDetails, 10, 20) : $supArtDetails,
                    );
 }
 
