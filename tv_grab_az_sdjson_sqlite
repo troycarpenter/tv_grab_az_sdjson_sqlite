@@ -167,6 +167,7 @@ my $quiet = 0;
 my $debug = 0;
 
 my $download = 1;
+my $num_prog_from_cache = 0;
 
 my $passwordHash;
 
@@ -1414,6 +1415,7 @@ $w->startTag('tv',
   print (STDERR "   $channelsWritten channels processed\n") if (!$quiet);
   my $programsWritten = programWriter($w);
   print (STDERR "   $programsWritten program schedules processed\n") if (!$quiet);
+  printf (STDERR "   $num_prog_from_cache programs retrieved from cache (%0.2f%%)\n", $num_prog_from_cache / $programsWritten * 100) if (!$quiet && $num_prog_from_cache);
   $w->endTag('tv');
   $w->end();
 }
@@ -2151,6 +2153,7 @@ sub write_programme {
     my $key = cache_generate_key($r2);
     my $cached_value = cache_get($key);
     if ($cached_value) {
+        ++$num_prog_from_cache;
         # Pop the key in to the output so we know
         # when we have retrieved from cache.
         $w->comment($key);
