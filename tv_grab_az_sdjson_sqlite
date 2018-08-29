@@ -1463,26 +1463,41 @@ sub programWriter {
       exit(1)
     }
 
+  # We bind reference variables to avoid allocating each
+  # time around the loop. This improves performance when
+  # we have tens of thousands of programmes.
+  my ($sched_station, $sched_starttime, $sched_duration, $sched_program, $sched_details,
+      $prog_details, $sched_starttime_str, $sched_endtime,
+      $stat_details, $sup_details,
+      $art_details, $supart_details,
+      $prog_hash, $sup_hash);
   # Nb: 1-based not 0-based.
-  $sth->bind_col( 1, undef, SQL_VARCHAR );
-  $sth->bind_col( 2, undef, SQL_DATETIME );
-  $sth->bind_col( 3, undef, SQL_INTEGER );
-  $sth->bind_col( 4, undef, SQL_VARCHAR );
-  $sth->bind_col( 5, undef, SQL_VARCHAR );
-  $sth->bind_col( 6, undef, SQL_VARCHAR );
-  $sth->bind_col( 7, undef, SQL_VARCHAR );
-  $sth->bind_col( 8, undef, SQL_VARCHAR );
-  $sth->bind_col( 9, undef, SQL_VARCHAR );
-  $sth->bind_col(10, undef, SQL_VARCHAR );
-  $sth->bind_col(11, undef, SQL_VARCHAR );
-  $sth->bind_col(12, undef, SQL_VARCHAR );
-  $sth->bind_col(13, undef, SQL_VARCHAR ); # prog_hash
-  $sth->bind_col(14, undef, SQL_VARCHAR ); # sup_hash
+  $sth->bind_col( 1, \$sched_station, SQL_VARCHAR );
+  $sth->bind_col( 2, \$sched_starttime, SQL_DATETIME );
+  $sth->bind_col( 3, \$sched_duration, SQL_INTEGER );
+  $sth->bind_col( 4, \$sched_program, SQL_VARCHAR );
+  $sth->bind_col( 5, \$sched_details, SQL_VARCHAR );
+  $sth->bind_col( 6, \$prog_details, SQL_VARCHAR );
+  $sth->bind_col( 7, \$sched_starttime_str, SQL_VARCHAR );
+  $sth->bind_col( 8, \$sched_endtime, SQL_VARCHAR );
+  $sth->bind_col( 9, \$stat_details, SQL_VARCHAR );
+  $sth->bind_col(10, \$sup_details, SQL_VARCHAR );
+  $sth->bind_col(11, \$art_details, SQL_VARCHAR );
+  $sth->bind_col(12, \$supart_details, SQL_VARCHAR );
+  $sth->bind_col(13, \$prog_hash, SQL_VARCHAR ); # prog_hash
+  $sth->bind_col(14, \$sup_hash, SQL_VARCHAR ); # sup_hash
 
   my $programsWritten = 0;
 
-  while (my $r = $sth->fetchrow_arrayref()) {
-      $programsWritten += output_program($w, $r);
+  while ($sth->fetch()) {
+      $programsWritten += output_program($w,
+                                         [$sched_station, $sched_starttime, $sched_duration, $sched_program, $sched_details,
+                                          $prog_details, $sched_starttime_str, $sched_endtime,
+                                          $stat_details, $sup_details,
+                                          $art_details, $supart_details,
+                                          $prog_hash, $sup_hash
+                                         ]
+                                        );
   }
     # We might have some programmes left over, so write them now.
   $programsWritten += output_program($w, $prog1->{db}) if $prog1;
@@ -1526,7 +1541,6 @@ sub output_program {
                                                  );
     state $merge_split = $opt->{'merge-split'} // $conf->{'merge-split'};
     my $stationDetails;
-
     # Shortcut decode logic (if possible) if user hasn't given regex.
     $stationDetails = $JSON->decode($r->[8]) if (($channelRegex || $channelExcludeRegex) && defined $r->[8]);
 
