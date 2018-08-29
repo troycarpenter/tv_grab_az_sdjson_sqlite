@@ -1525,13 +1525,13 @@ sub output_program {
                                            on_error => 'croak',
                                                  );
     state $merge_split = $opt->{'merge-split'} // $conf->{'merge-split'};
-    my $programDetails = $JSON->decode($r->[5]) if defined($r->[5]);
     my $stationDetails = $JSON->decode($r->[8]) if defined $r->[8];
-    my $supplementalDetails = $JSON->decode($r->[9]) if defined($r->[9]);
     if ($stationDetails && $stationDetails->{name}) {
         return 0 if $channelRegex        && $stationDetails->{name} !~ $channelRegex;
         return 0 if $channelExcludeRegex && $stationDetails->{name} =~ $channelExcludeRegex;
     }
+    my $programDetails = $JSON->decode($r->[5]) if defined($r->[5]);
+    my $supplementalDetails = $JSON->decode($r->[9]) if defined($r->[9]);
 
     # Shortcut logic if we are not merging programmes.
     if (!$merge_split) {
