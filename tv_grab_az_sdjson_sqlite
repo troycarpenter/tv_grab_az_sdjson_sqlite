@@ -1557,6 +1557,19 @@ sub output_program {
         }
     }
 
+    # Shortcut clone if current programme is not a movie
+    # then we can clearout.
+    if ($prog1 && $prog2 && $r->[3] !~ /^MV/) {
+        # Print prog1
+        my $ret = print_and_shuffle_programmes($w);
+        # And print prog2
+        $ret += print_and_shuffle_programmes($w);
+        # And print the current programme.
+        return $ret + write_programme($w, { db => $r,
+                                            stationDetails => $stationDetails,
+                                          });
+    }
+
     my $programDetails = $JSON->decode($r->[5]) if defined($r->[5]);
     my $supplementalDetails = $JSON->decode($r->[9]) if defined($r->[9]);
 
@@ -1715,6 +1728,7 @@ sub cache_generate_key {
 
 sub print_and_shuffle_programmes {
     my ($w) = @_;
+    return 0 unless $prog1;
     my $ret = write_programme($w, $prog1);
     $prog1 = $prog2;
     $prog2 = $prog3;
