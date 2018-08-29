@@ -271,7 +271,7 @@ my %catmap_minor = (
       preferredmethod => 'allatonce',
       version => "$SCRIPT_VERSION",
       description => 'Multinational (Schedules Direct JSON web services with SQLite DB)',
-      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s channel-exclude-regex=s use-category-for-keyword! update-description-with-all! update-description-with-credits! update-description-with-categories! update-description-with-year! update-description-with-season-episode! update-description-with-icons! update-description-with-icons-basic! update-description-with-icons-entity! update-description-with-premiere! update-description-with-live! update-description-with-advisory! update-description-with-artwork! update-description-with-stars! update-description-with-rating! update-description-with-title! update-previously-shown-with-year! content-rating-order=s passwordhash=s cache-driver=s cache-namespace-extra=s cache-expiry=s/],
+      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s channel-exclude-regex=s use-category-for-keyword! update-description-with-all! update-description-with-credits! update-description-with-categories! update-description-with-year! update-description-with-season-episode! update-description-with-icons! update-description-with-icons-basic! update-description-with-icons-entity! update-description-with-premiere! update-description-with-live! update-description-with-advisory! update-description-with-artwork! update-description-with-stars! update-description-with-rating! update-description-with-title! update-previously-shown-with-year! content-rating-order=s passwordhash=s cache-driver=s cache-namespace-extra=s cache-expiry=s cache-ignore-unchanged-programmes!/],
       defaults => { days => 30 },
     }
   );
@@ -2154,12 +2154,19 @@ sub write_programme {
         # Pop the key in to the output so we know
         # when we have retrieved from cache.
         $w->comment($key);
+        # Allow user to specify we only output programmes
+        # that were not already in the cache. This allows
+        # us to generate far smaller xmltv files since if
+        # the programme has not changed then the PVR doesn't
+        # need to re-process the same information time and
+        # time again.
+        state $no_print = get_option('cache-ignore-unchanged-programmes');
         # We should use "raw", but we'll just print
         # directly for (a) speed and (b) to allow debug
         # checking of rest of xml writer (which is not
         # allowed with raw).
         # $w->raw($cached_value);
-        print $cached_value;
+        print $cached_value unless $no_print;
         # One more programme printed.
         return 1;
     }

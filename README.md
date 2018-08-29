@@ -85,7 +85,11 @@ a different caching namespace to avoid retrieving incorrect programme details.
 String specifying expiry to use. By default the cached programme data expires
 after a few days to recover space and ensure listings are regenerated.
 An example would be "--cache-expiry='10 days'"
-
+* --cache-ignore-unchanged-programmes (experimental)
+If the programme was already in the cache then do not include it in the
+generated xmltv file. This avoids PVRs having to constantly reprocess
+programmes that have not changed.
+This option is experimental and may be removed/renamed in the future.
 
 Extra Options
 -------------
