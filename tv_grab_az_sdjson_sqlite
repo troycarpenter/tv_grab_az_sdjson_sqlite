@@ -1557,24 +1557,6 @@ sub output_program {
         }
     }
 
-    if ($prog1 && $prog2) {
-        # We would be $prog3. If $prog1 is not MV and $prog2 is not MV
-        # and we are not MV then we can output all three immediately
-        # and avoid a clone.
-        my $progid1 = $prog1->{db}->[3];
-        my $progid2 = $prog2->{db}->[3];
-        my $progid3 = $r->[3];
-        if ($progid1 !~ /^MV/ && $progid2 !~ /^MV/ && $progid3 !~ /^MV/) {
-            my $ret = write_programme($w, $prog1);
-            $ret += write_programme($w, $prog2);
-            $ret += write_programme($w, {db => $r,
-                                         stationDetails => $stationDetails,
-                                        }
-                                    );
-            return $ret;
-        }
-    }
-
     my $programDetails = $JSON->decode($r->[5]) if defined($r->[5]);
     my $supplementalDetails = $JSON->decode($r->[9]) if defined($r->[9]);
 
