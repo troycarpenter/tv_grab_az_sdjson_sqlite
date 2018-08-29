@@ -1557,6 +1557,24 @@ sub output_program {
         }
     }
 
+    if ($prog1 && $prog2) {
+        # We would be $prog3. If $prog1 is not MV and $prog2 is not MV
+        # and we are not MV then we can output all three immediately
+        # and avoid a clone.
+        my $progid1 = $prog1->{db}->[3];
+        my $progid2 = $prog2->{db}->[3];
+        my $progid3 = $r->[3];
+        if ($progid1 !~ /^MV/ && $progid2 !~ /^MV/ && $progid3 !~ /^MV/) {
+            my $ret = write_programme($w, $prog1);
+            $ret += write_programme($w, $prog2);
+            $ret += write_programme($w, {db => $r,
+                                         stationDetails => $stationDetails,
+                                        }
+                                    );
+            return $ret;
+        }
+    }
+
     my $programDetails = $JSON->decode($r->[5]) if defined($r->[5]);
     my $supplementalDetails = $JSON->decode($r->[9]) if defined($r->[9]);
 
@@ -1715,11 +1733,17 @@ sub cache_generate_key {
 
 sub print_and_shuffle_programmes {
     my ($w) = @_;
-    write_programme($w, $prog1);
+    my $ret = write_programme($w, $prog1);
     $prog1 = $prog2;
     $prog2 = $prog3;
     $prog3 = undef;
-    return 1;
+    # If we can clear out prog1 (as not a movie) then we do so now to
+    # avoid having to do clones later.  We do this recursively so we
+    # can also clear out $prog2 if possible.
+    if ($prog1 && $prog1->{db}->[3] !~ /^MV/) {
+        $ret += print_and_shuffle_programmes($w);
+    }
+    return $ret;
 }
 
 sub get_option {
@@ -2176,7 +2200,7 @@ sub write_programme {
         ++$num_prog_from_cache;
         # Pop the key in to the output so we know
         # when we have retrieved from cache.
-        $w->comment($key);
+        $w->comment($key) if $debug;
         # Allow user to specify we only output programmes
         # that were not already in the cache. This allows
         # us to generate far smaller xmltv files since if
