@@ -73,7 +73,9 @@ in the redis server's redis.conf).
 
 * --cache-driver
 Currently only "Redis" is tested and needs the extra Perl modules
-installed.
+installed. The "File" backend appears to work but requires a fast
+drive/tmpfs to provide peak performance and needs File would need the
+"--cache-purge-expired" option to ensure old entries are expired.
 * --cache-namespace-extra
 Extra text to use when generating a cache namespace.  This is used if
 you run the programme multiple times and alter options that affect the
@@ -90,6 +92,10 @@ If the programme was already in the cache then do not include it in the
 generated xmltv file. This avoids PVRs having to constantly reprocess
 programmes that have not changed.
 This option is experimental and may be removed/renamed in the future.
+* --cache-purge-expired
+Purge expired entries from the cache. This is _not_ needed for
+Redis and is inefficient for many other cache backend drivers
+(such as File) and not implemented at all in some other drivers.
 
 Extra Options
 -------------
