@@ -168,6 +168,8 @@ my $debug = 0;
 
 my $download = 1;
 my $num_prog_from_cache = 0;
+my $num_prog_details_not_from_cache = 0;
+my $num_prog_details_total = 0;
 
 my $passwordHash;
 
@@ -1404,6 +1406,11 @@ if (get_option('cache-purge-expired') && is_cache_enabled()) {
     if (my $err = @_) {
         print STDERR "Failed to purge cache: $err\n";
     }
+    # Need separate purge for this since it is a different namespace.
+    eval { get_cache_object_for_programme_details()->purge() };
+    if (my $err = @_) {
+        print STDERR "Failed to purge cache: $err\n";
+    }
 }
 exit(0);
 
@@ -1429,6 +1436,13 @@ $w->startTag('tv',
   my $programsWritten = programWriter($w);
   print (STDERR "   $programsWritten program schedules processed\n") if (!$quiet);
   printf (STDERR "   $num_prog_from_cache programs retrieved from cache (%0.2f%%)\n", $num_prog_from_cache / $programsWritten * 100) if (!$quiet && $num_prog_from_cache);
+  {
+      # Unfortunately the "compute" tracks number computed not number from cache,
+      # so calculate number from cache here.
+      my $num_prog_details_from_cache = $num_prog_details_total - $num_prog_details_not_from_cache;
+      printf (STDERR "   %d of %d programs details retrieved from cache (%0.2f%%)\n", $num_prog_details_from_cache, $num_prog_details_total, $num_prog_details_from_cache / $num_prog_details_total * 100) if (!$quiet && $num_prog_details_from_cache > 0);
+  }
+
   $w->endTag('tv');
   $w->end();
 }
@@ -1709,17 +1723,39 @@ sub get_cache_object {
     return $cache;
 }
 
+sub get_cache_object_for_programme_details {
+    state $cache;
+    return $cache if $cache;
+    require CHI;
+    $cache = CHI->new(driver => get_option('cache-driver'),
+                      namespace => "pd." . get_cache_namespace(),
+                      expires_on_backend => 1,
+                      # We use an l1 cache since programme details are often repeated.
+                      # For example "Night News" will be on every day, and shows are
+                      # repeated in morning and night.
+                      l1_cache => { driver => 'Memory', global => 1, max_size => 1024 * 1024 * 20 },
+                     );
+    return $cache;
+}
+
 sub is_cache_enabled {
-    state $is_enabled = get_cache_object();
+    # If we have a driver then we are caching.
+    state $is_enabled = get_option('cache-driver');
     return $is_enabled;
 }
 
-sub cache_set {
-    my ($key, $value_ref, $optional_timeout) = @_;
+sub cache_get_expiry {
+    my ($optional_timeout) = @_;
     # We ttl all cache entries to ensure old data eventually
     # disappears without user having to do anything.
     $optional_timeout = get_option('cache-expiry') // '+ 5 days' unless $optional_timeout;
     $optional_timeout = '+ 30 s' if $debug;
+    return $optional_timeout;
+}
+
+sub cache_set {
+    my ($key, $value_ref, $optional_timeout) = @_;
+    $optional_timeout = cache_get_expiry($optional_timeout);
     print STDERR "Setting cache $key for $optional_timeout\n" if $debug;
     get_cache_object->set($key, $value_ref, $optional_timeout);
     if ($debug) {
@@ -1774,6 +1810,54 @@ sub cache_generate_key {
                      $supArtDetails && length($supArtDetails) > 50 ? substr($supArtDetails, 10, 20) : $supArtDetails,
                    );
 }
+
+sub cache_generate_key_for_programme_details {
+    my ($r2) = @_;
+    my $r = $r2->{db};
+
+    my $pID = $r->[3] // "No prog id";
+    # We need schedule for premiere/last showing/videoProperties/hdtv
+    # The string is relatively short, but we not can use it verbatim
+    # since it contains airDateTime and we we want to share the
+    # same details for multiple date/times.
+    my $scheduleDetails = $r2->{scheduleDetails};
+    die "No schedule Details for $pID" unless $scheduleDetails; # Ensure details are already unpacked!
+
+    my $programHash = $r->[12] // "No prog hash";
+    my $supplementalHash = $r->[13] // "No sup hash";
+    my $scheduleHash = $scheduleDetails->{md5} // die "No schedule hash";
+    my @multipart;
+    # Can't just join since keys are in an unspecified order and vary with
+    # each run for security.
+    if (defined($scheduleDetails->{multipart})) {
+        push @multipart, $scheduleDetails->{multipart}->{'partNumber'};
+        push @multipart, $scheduleDetails->{multipart}->{'totalParts'};
+    }
+    my @tags;
+    push @tags,
+      $pID,
+      $programHash,
+      $supplementalHash,
+      # We can *not* just use the scheduleHash.
+      # The tuple of (programHash, scheduleHash) should be unique
+      # and if schedule changes then we get a new hash, however
+      # that's not the case. The scheduleHash is the same value
+      # for both HD and non-HD versions of the same programID.
+      $scheduleHash,
+      $scheduleDetails->{duration} // "NoDur",
+      $scheduleDetails->{isPremiereOrFinale} // "NoIsPrem",
+      $scheduleDetails->{liveTapeDelay} // "NoLive",
+      $scheduleDetails->{multipart} // "NoMulti",
+      $scheduleDetails->{new} // "NoNew",
+      $scheduleDetails->{premiere} // "NoPrem",
+      $scheduleDetails->{ratings} // "NoRat";
+    push @tags, join ",", @{$scheduleDetails->{audioProperties}} if $scheduleDetails->{audioProperties};
+    push @tags, join ",", @{$scheduleDetails->{videoProperties}} if $scheduleDetails->{videoProperties};
+    push @tags, join ",", @multipart if scalar @multipart;
+
+    return sha1_hex( join ":", @tags);
+}
+
 
 sub print_and_shuffle_programmes {
     my ($w) = @_;
@@ -2249,7 +2333,32 @@ sub write_programme_i {
                  'start'   => "$r->[6] +0000",
                  'stop'    => "$r->[7] +0000");
 
-    write_programme_details($w, $r2);
+    ++$num_prog_details_total;
+    if (!is_cache_enabled()) {
+        write_programme_details($w, $r2);
+    } else {
+        my $scheduleDetails = $r2->{scheduleDetails};
+        if (!$scheduleDetails && $r->[4]) {
+            $scheduleDetails = $r2->{scheduleDetails} = $JSON->decode($r->[4]);
+        }
+        my $key = cache_generate_key_for_programme_details($r2);
+        my $out = get_cache_object_for_programme_details()->
+          compute($key, cache_get_expiry(), sub {
+                      my $cache_prog =
+                        XML::Writer->new(OUTPUT => 'self',
+                                         ENCODING => 'UTF-8',
+                                         DATA_MODE => 1,
+                                         DATA_INDENT => 1,
+                                         UNSAFE => (!$debug)
+                                        );
+                      write_programme_details($cache_prog, $r2);
+                      my $out = $cache_prog->to_string();
+                      ++$num_prog_details_not_from_cache;
+                      return $out;
+                  });
+        $w->raw($out) if $out;
+
+    }
     $w->endTag('programme');
 }
 
@@ -2317,12 +2426,16 @@ sub write_programme_details {
     if (!$supplementalDetails && $r->[9]) {
         $supplementalDetails = $r2->{supplementalDetails} = $JSON->decode($r->[9]);
     }
+    my $scheduleDetails = $r2->{scheduleDetails};
+    if (!$scheduleDetails && $r->[4]) {
+        $scheduleDetails = $r2->{scheduleDetails} = $JSON->decode($r->[4]);
+    }
+
       # Note that we should legitmately parse the datetime here, but
       # the performance absolutely sucks, so we let sqlite do this
       # my $startTime = DateTime::Format::SQLite->parse_datetime($r->[1]);
       # my $endTime = $startTime->clone()->add(seconds => $r->[2]);
       my $pID = $r->[3];
-      my $scheduleDetails = $JSON->decode($r->[4]);
 
     # We fetch artwork from the DB separately. We used
     # to fetch it all in one SQL, but the artwork JSON
