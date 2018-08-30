@@ -134,7 +134,7 @@ my $SCRIPT_URL                 = 'https://github.com/azlm8t/tv_grab_zz_sdjson_sq
 my $SCRIPT_NAME                = basename("$0");
 my $SCRIPT_NAME_DIR            = dirname("$0");
 
-my $SCRIPT_DB_VERSION          = 3;            # Used for script/db updates (see DB_open)
+my $SCRIPT_DB_VERSION          = 3;            # Used for script/db updates (see DB_open_global)
 
 my $SD_DESC                    = 'Schedules Direct';
 my $SD_SITEURL                 = 'https://www.schedulesdirect.org';
@@ -390,7 +390,7 @@ my $sth4;
 # Open database
 #
 print (STDERR "Opening the local database\n") if (!$quiet);
-DB_open($conf->{'database'}->[0]);
+DB_open_global($conf->{'database'}->[0]);
 
 #
 # Provide the ability to force a (mostly) complete download
@@ -3138,7 +3138,7 @@ sub configureGrabber
         my $username;
         my $passwordhash;
 
-        DB_open($conf->{'database'}->[0]);
+        DB_open_global($conf->{'database'}->[0]);
 
         SD_login();                             # Login
         SD_downloadLineups();                   # Update our SD lineups in the DB
@@ -3273,7 +3273,7 @@ sub listChannels
     $download = 0 if ($opt->{'no-download'});
 
     print (STDERR "Opening the local database\n") if (!$quiet);
-    DB_open($conf->{'database'}->[0]);
+    DB_open_global($conf->{'database'}->[0]);
 
     if ($opt->{'force-download'})
       {
@@ -3519,7 +3519,7 @@ sub listLineups
     $download = 0 if ($opt->{'no-download'});
 
     print (STDERR "Opening the local database\n") if (!$quiet);
-    DB_open($conf->{'database'}->[0]);
+    DB_open_global($conf->{'database'}->[0]);
 
     if ($opt->{'force-download'})
       {
@@ -3619,7 +3619,7 @@ sub getLineup
     $download = 0 if ($opt->{'no-download'});
 
     print (STDERR "Opening the local database\n") if (!$quiet);
-    DB_open($conf->{'database'}->[0]);
+    DB_open_global($conf->{'database'}->[0]);
 
     if ($opt->{'force-download'})
       {
@@ -3966,8 +3966,8 @@ sub loadOldConfig
 #
 sub SD_login
   {
-    my $username = DB_settingsGet('username');
-    my $passwordhash = $passwordHash || DB_settingsGet('passwordhash');
+    my $username = DB_settingsGet($DBH, 'username');
+    my $passwordhash = $passwordHash || DB_settingsGet($DBH, 'passwordhash');
 
     if ((!defined($username)) || (!defined($passwordhash)))
       {
@@ -4667,7 +4667,7 @@ sub askChoice
   }
 
 #
-# DB_open
+# DB_open_global
 #
 # Convenience routine to open the database
 #
@@ -4686,14 +4686,22 @@ sub askChoice
 #   Output:
 #              <none>
 #
-sub DB_open
+sub DB_open_global
   {
     my ($dbname, undef) = @_;
 
     #
     # Quick exit if we already have the database open
     #
+    say "DB_open_global";
+
     return if (defined($DBH));
+    return $DBH = DB_open_local($dbname);
+}
+
+# Open a database and return the handle.
+sub DB_open_local {
+    my ($dbname) = @_;
 
     if (!defined($dbname))
       {
@@ -4703,7 +4711,7 @@ sub DB_open
       }
 
     #
-    # Insure base directory exists
+    # Ensure base directory exists
     #
     if (! -d dirname("$dbname"))
       {
@@ -4719,42 +4727,42 @@ sub DB_open
           }
       }
 
-    $DBH = DBI->connect("DBI:SQLite:dbname=$dbname", "", "",
+    my $db = DBI->connect("DBI:SQLite:dbname=$dbname", "", "",
                         { RaiseError => 0, PrintError => 0, AutoCommit => 0 });
 
-    if (!defined($DBH))
+    if (!defined($db))
       {
-        print (STDERR "Unable to open database file $dbname: " . $DBH->errstr . "\n");
+        print (STDERR "Unable to open database file $dbname: " . $db->errstr . "\n");
         exit(1);
       }
 
     #
     # SQLite specific optimizations (if it works, it works)
     #
-    $DBH->{'AutoCommit'} = 1;
-    $DBH->do("PRAGMA page_size=4096");
-    $DBH->do("PRAGMA auto_vacuum=2");
-    $DBH->do("PRAGMA journal_mode=WAL");
-    $DBH->{'AutoCommit'} = 0;
+    $db->{'AutoCommit'} = 1;
+    $db->do("PRAGMA page_size=4096");
+    $db->do("PRAGMA auto_vacuum=2");
+    $db->do("PRAGMA journal_mode=WAL");
+    $db->{'AutoCommit'} = 0;
 
     #
     # Create settings tables if needed
     #
-    my $rc = $DBH->do("create table if not exists settings (" .
+    my $rc = $db->do("create table if not exists settings (" .
                         "tag varchar(256) not null primary key, " .
                         "value varchar(256))");
     if ((!defined($rc)) || ($rc < 0))
       {
-        print (STDERR "Unable to create settings table in database $dbname: " . $DBH->errstr . "\n");
-        $DBH->rollback();
+        print (STDERR "Unable to create settings table in database $dbname: " . $db->errstr . "\n");
+        $db->rollback();
         exit(1);
       }
-    $DBH->commit();
+    $db->commit();
 
     #
     # Validate DB version support
     #
-    my $version = DB_settingsGet('version');
+    my $version = DB_settingsGet($db, 'version');
     $version = 0 if (!defined($version));
     if ($version =~ /^\d+$/)
       {
@@ -4770,7 +4778,7 @@ sub DB_open
       {
         print (STDERR "Initializing database $dbname\n") if (!$quiet);
         my $rc;
-        $rc = $DBH->do("create table lineups ( " .
+        $rc = $db->do("create table lineups ( " .
                          "lineup varchar(128) not null primary key, " .
                          "name varchar(128) not null, " .
                          "location varchar(128) not null, " .
@@ -4781,30 +4789,30 @@ sub DB_open
                          "details blob not null )");
         if ((!defined($rc)) || ($rc < 0))
           {
-            print (STDERR "Unable to create lineups table in database $dbname: " . $DBH->errstr . "\n");
-            $DBH->rollback();
+            print (STDERR "Unable to create lineups table in database $dbname: " . $db->errstr . "\n");
+            $db->rollback();
             exit(1);
           }
-        $rc = $DBH->do("create table programs ( " .
+        $rc = $db->do("create table programs ( " .
                          "program varchar(128) not null primary key, " .
                          "hash varchar(64) not null, " .
                          "details blob not null )");
         if ((!defined($rc)) || ($rc < 0))
           {
-            print (STDERR "Unable to create programs table in database $dbname: " . $DBH->errstr . "\n");
-            $DBH->rollback();
+            print (STDERR "Unable to create programs table in database $dbname: " . $db->errstr . "\n");
+            $db->rollback();
             exit(1);
           }
-        $rc = $DBH->do("create table stations ( " .
+        $rc = $db->do("create table stations ( " .
                          "station varchar(128) not null primary key, " .
                          "details blob not null )");
         if ((!defined($rc)) || ($rc < 0))
           {
-            print (STDERR "Unable to create stations table in database $dbname: " . $DBH->errstr . "\n");
-            $DBH->rollback();
+            print (STDERR "Unable to create stations table in database $dbname: " . $db->errstr . "\n");
+            $db->rollback();
             exit(1);
           }
-        $rc = $DBH->do("create table stations_schedules_hash ( " .
+        $rc = $db->do("create table stations_schedules_hash ( " .
                          "station varchar(128) not null, " .
                          "day date not null, " .
                          "hash varchar(64) not null, " .
@@ -4812,18 +4820,18 @@ sub DB_open
                          "primary key(station, day) )");
         if ((!defined($rc)) || ($rc < 0))
           {
-            print (STDERR "Unable to create stations_schedules_hash table in database $dbname: " . $DBH->errstr . "\n");
-            $DBH->rollback();
+            print (STDERR "Unable to create stations_schedules_hash table in database $dbname: " . $db->errstr . "\n");
+            $db->rollback();
             exit(1);
           }
-        $rc = $DBH->do("create index stations_schedules_hash_index_hash on stations_schedules_hash (hash)");
+        $rc = $db->do("create index stations_schedules_hash_index_hash on stations_schedules_hash (hash)");
         if ((!defined($rc)) || ($rc < 0))
           {
-            print (STDERR "Unable to create stations schedules hash index in database $dbname: " . $DBH->errstr . "\n");
-            $DBH->rollback();
+            print (STDERR "Unable to create stations schedules hash index in database $dbname: " . $db->errstr . "\n");
+            $db->rollback();
             exit(1);
           }
-        $rc = $DBH->do("create table channels ( " .
+        $rc = $db->do("create table channels ( " .
                          "lineup varchar(128) not null, " .
                          "station varchar(128) not null, " .
                          "channum varchar(128) not null default '', " .
@@ -4831,36 +4839,36 @@ sub DB_open
                          "details blob not null )");
         if ((!defined($rc)) || ($rc < 0))
           {
-            print (STDERR "Unable to create channels table in database $dbname: " . $DBH->errstr . "\n");
-            $DBH->rollback();
+            print (STDERR "Unable to create channels table in database $dbname: " . $db->errstr . "\n");
+            $db->rollback();
             exit(1);
           }
-        $rc = $DBH->do("create index channels_index_lineup_station on channels (lineup, station)");
+        $rc = $db->do("create index channels_index_lineup_station on channels (lineup, station)");
         if ((!defined($rc)) || ($rc < 0))
           {
-            print (STDERR "Unable to create channel index in database $dbname: " . $DBH->errstr . "\n");
-            $DBH->rollback();
+            print (STDERR "Unable to create channel index in database $dbname: " . $db->errstr . "\n");
+            $db->rollback();
             exit(1);
           }
-        $rc = $DBH->do("create table schedules_hash ( " .
+        $rc = $db->do("create table schedules_hash ( " .
                          "station varchar(128) not null, " .
                          "day date not null, " .
                          "hash varchar(64) not null, " .
                          "primary key (station, day) )");
         if ((!defined($rc)) || ($rc < 0))
           {
-            print (STDERR "Unable to create schedules_hash table in database $dbname: " . $DBH->errstr . "\n");
-            $DBH->rollback();
+            print (STDERR "Unable to create schedules_hash table in database $dbname: " . $db->errstr . "\n");
+            $db->rollback();
             exit(1);
           }
-        $rc = $DBH->do("create index schedules_hash_index_hash on schedules_hash (hash)");
+        $rc = $db->do("create index schedules_hash_index_hash on schedules_hash (hash)");
        if ((!defined($rc)) || ($rc < 0))
           {
-            print (STDERR "Unable to create schedules hash index in database $dbname: " . $DBH->errstr . "\n");
-            $DBH->rollback();
+            print (STDERR "Unable to create schedules hash index in database $dbname: " . $db->errstr . "\n");
+            $db->rollback();
             exit(1);
           }
-        $rc = $DBH->do("create table schedules ( " .
+        $rc = $db->do("create table schedules ( " .
                          "station varchar(128) not null, " .
                          "day date not null, " .
                          "starttime datetime not null, " .
@@ -4871,28 +4879,28 @@ sub DB_open
                          "primary key (station, day, starttime, duration) )");
         if ((!defined($rc)) || ($rc < 0))
           {
-            print (STDERR "Unable to create schedules table in database $dbname: " . $DBH->errstr . "\n");
-            $DBH->rollback();
+            print (STDERR "Unable to create schedules table in database $dbname: " . $db->errstr . "\n");
+            $db->rollback();
             exit(1);
           }
-        $rc = $DBH->do("create index schedules_index_station_starttime on schedules (station, starttime)");
+        $rc = $db->do("create index schedules_index_station_starttime on schedules (station, starttime)");
         if ((!defined($rc)) || ($rc < 0))
           {
-            print (STDERR "Unable to create schedules index in database $dbname: " . $DBH->errstr . "\n");
-            $DBH->rollback();
+            print (STDERR "Unable to create schedules index in database $dbname: " . $db->errstr . "\n");
+            $db->rollback();
             exit(1);
           }
-        $rc = $DBH->do("create index schedules_index_program on schedules (program)");
+        $rc = $db->do("create index schedules_index_program on schedules (program)");
         if ((!defined($rc)) || ($rc < 0))
           {
-            print (STDERR "Unable to create schedules program index in database $dbname: " . $DBH->errstr . "\n");
-            $DBH->rollback();
+            print (STDERR "Unable to create schedules program index in database $dbname: " . $db->errstr . "\n");
+            $db->rollback();
             exit(1);
           }
 
        $version = 1;
        DB_settingsSet('version', 1);
-       $DBH->commit();
+       $db->commit();
       }
 
     if ($version > $SCRIPT_DB_VERSION)
@@ -4906,41 +4914,41 @@ sub DB_open
           {
             $version = 2;
             print (STDERR "Upgrading database to version $version\n") if (!$quiet);
-            $rc = $DBH->do("alter table programs add column program_supplemental varchar(128)");
+            $rc = $db->do("alter table programs add column program_supplemental varchar(128)");
             if ((!defined($rc)) || ($rc < 0))
               {
-                print (STDERR "Unable to add column program_supplemental to programs table in database $dbname: " . $DBH->errstr . "\n");
-                $DBH->rollback();
+                print (STDERR "Unable to add column program_supplemental to programs table in database $dbname: " . $db->errstr . "\n");
+                $db->rollback();
                 exit(1);
               }
-            $rc = $DBH->do("alter table programs add column downloaded datetime not null default '1970-01-01 00:00:00'");
+            $rc = $db->do("alter table programs add column downloaded datetime not null default '1970-01-01 00:00:00'");
             if ((!defined($rc)) || ($rc < 0))
               {
-                print (STDERR "Unable to add column downloaded to programs table in database $dbname: " . $DBH->errstr . "\n");
-                $DBH->rollback();
+                print (STDERR "Unable to add column downloaded to programs table in database $dbname: " . $db->errstr . "\n");
+                $db->rollback();
                 exit(1);
               }
-            $rc = $DBH->do("create index programs_index_program_supplemental on programs(program_supplemental)");
+            $rc = $db->do("create index programs_index_program_supplemental on programs(program_supplemental)");
             if ((!defined($rc)) || ($rc < 0))
               {
-                print (STDERR "Unable to create programs_index_program_supplemental in database $dbname: " . $DBH->errstr . "\n");
-                $DBH->rollback();
+                print (STDERR "Unable to create programs_index_program_supplemental in database $dbname: " . $db->errstr . "\n");
+                $db->rollback();
                 exit(1);
               }
-            $rc = $DBH->do("create index programs_index_downloaded on programs(downloaded)");
+            $rc = $db->do("create index programs_index_downloaded on programs(downloaded)");
             if ((!defined($rc)) || ($rc < 0))
               {
-                print (STDERR "Unable to create programs_index_downloaded in database $dbname: " . $DBH->errstr . "\n");
-                $DBH->rollback();
+                print (STDERR "Unable to create programs_index_downloaded in database $dbname: " . $db->errstr . "\n");
+                $db->rollback();
                 exit(1);
               }
             # Update existing programs
             $sql = "update programs set downloaded = ?";
-            $sth = $DBH->prepare_cached($sql);
+            $sth = $db->prepare_cached($sql);
             if (!defined($sth))
               {
-                print (STDERR "Unexpected error when preparing statement ($sql): " . $DBH->errstr . "\n");
-                $DBH->rollback();
+                print (STDERR "Unexpected error when preparing statement ($sql): " . $db->errstr . "\n");
+                $db->rollback();
                 exit(1);
               }
             $sth->bind_param( 1, $nowDateTimeSQLite, SQL_DATETIME );
@@ -4948,45 +4956,45 @@ sub DB_open
             if ($sth->err)
               {
                 print (STDERR "Unexpected error when executing statement ($sql): " . $sth->errstr . "\n");
-                $DBH->rollback();
+                $db->rollback();
                 exit(1);
               }
             $sql = "update programs set program_supplemental = 'SH' || substr(program,3,8) || '0000' where program like 'EP%'";
-            $sth = $DBH->prepare_cached($sql);
+            $sth = $db->prepare_cached($sql);
             if (!defined($sth))
               {
-                print (STDERR "Unexpected error when preparing statement ($sql): " . $DBH->errstr . "\n");
-                $DBH->rollback();
+                print (STDERR "Unexpected error when preparing statement ($sql): " . $db->errstr . "\n");
+                $db->rollback();
                 exit(1);
               }
             $sth->execute();
             if ($sth->err)
               {
                 print (STDERR "Unexpected error when executing statement ($sql): " . $sth->errstr . "\n");
-                $DBH->rollback();
+                $db->rollback();
                 exit(1);
               }
             DB_settingsSet('version', $version);
-            $DBH->commit();
+            $db->commit();
         }
 
         if (2 == $version)
           {
               $version = 3;
               print (STDERR "Updating database to version $version\n") if (!$quiet);
-                      $rc = $DBH->do("create table if not exists artwork ( " .
+                      $rc = $db->do("create table if not exists artwork ( " .
                          "program varchar(128) not null primary key, " .
                          "hash varchar(64) not null, " .
                          "details blob not null) ");
               if ((!defined($rc)) || ($rc < 0))
                 {
-                    print (STDERR "Unable to create schedules table in database $dbname: " . $DBH->errstr . "\n");
-                    $DBH->rollback();
+                    print (STDERR "Unable to create schedules table in database $dbname: " . $db->errstr . "\n");
+                    $db->rollback();
                     exit(1);
                 }
 
               DB_settingsSet('version', $version);
-              $DBH->commit();
+              $db->commit();
           }
 
         ##
@@ -4996,10 +5004,10 @@ sub DB_open
         ##      print (STDERR "Updating database to version $version\n") if (!$quiet);
         ##      ## Alter table, create index, ?
         ##      DB_settingsSet('version', $version);
-        ##      $DBH->commit();
+        ##      $db->commit();
         ##    }
       }
-    return;
+    return $db;
   }
 
 #
@@ -5008,19 +5016,20 @@ sub DB_open
 # Convenience routine to get a setting from the database
 #
 #   Input:
+#              db          - database to use
 #              tag         - the tag
 #   Output:
 #              value       - of the tag (or undef)
 #
 sub DB_settingsGet
   {
-    my ($tag, undef) = @_;
+    my ($db, $tag, undef) = @_;
 
     my $value;
 
     my $sql = "select value from settings where tag = ?";
 
-    my $sth = $DBH->prepare_cached($sql);
+    my $sth = $db->prepare_cached($sql);
     if (!defined($sth))
       {
         print (STDERR "Unexpected error when preparing statement ($sql): " . $DBH->errstr . "\n");
@@ -5493,9 +5502,9 @@ sub manageLineups
 
     if ((defined($conf->{'database'}->[0])) && (-f $conf->{'database'}->[0]))
       {
-        DB_open($conf->{'database'}->[0]);
-        $username = DB_settingsGet('username');
-        $passwordhash = $passwordHash || DB_settingsGet('passwordhash');
+        DB_open_global($conf->{'database'}->[0]);
+        $username = DB_settingsGet($DBH, 'username');
+        $passwordhash = $passwordHash || DB_settingsGet($DBH, 'passwordhash');
       }
 
     # Try obtained username/password, but allow re-entry
@@ -5761,7 +5770,7 @@ sub manageLineups
                 my $db = $conf->{'database'}->[0] || File::HomeDir->my_home . "/.xmltv/SchedulesDirect.DB";
                 my $newdb = ask("\nEnter your database[$db]:");
                 $db = $newdb if ($newdb ne '');
-                DB_open($db);
+                DB_open_global($db);
                 $prompt .= "Database initialized.\n";
               }
 
