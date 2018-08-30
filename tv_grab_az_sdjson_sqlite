@@ -1975,12 +1975,16 @@ sub get_json_artwork_for_progid {
     my ($progid) = @_;
     # Sqlite allows us to execute a statement even during a fetch.
     # "Portable applications should not assume [this]" (DBI).
+    # So, to be portable, we'll open a second DB connection here.
+    state $db = DB_open_local(noupgrade => 1, # Don't want to go through upgrading db since it's already done.
+                              AutoCommit => 1, RaiseError => 1, PrintError => 1);
     state $sql = "select details from artwork where program = ?";
-    state $sth = $DBH->prepare_cached($sql);
+    state $sth = $db->prepare_cached($sql);
     $sth->bind_param(1, $progid);
     $sth->execute();
     $sth->bind_col( 1, undef, SQL_VARCHAR );
     if (my @row = $sth->fetchrow_array) {
+        $sth->finish();
         return $row[0];
     }
     return undef;
@@ -4693,15 +4697,14 @@ sub DB_open_global
     #
     # Quick exit if we already have the database open
     #
-    say "DB_open_global";
-
     return if (defined($DBH));
-    return $DBH = DB_open_local($dbname);
+    return $DBH = DB_open_local(dbname => $dbname);
 }
 
 # Open a database and return the handle.
 sub DB_open_local {
-    my ($dbname) = @_;
+    my (%opts) = @_;
+    my $dbname = $opts{dbname} // $conf->{'database'}->[0];
 
     if (!defined($dbname))
       {
@@ -4728,13 +4731,21 @@ sub DB_open_local {
       }
 
     my $db = DBI->connect("DBI:SQLite:dbname=$dbname", "", "",
-                        { RaiseError => 0, PrintError => 0, AutoCommit => 0 });
+                        { RaiseError => $opts{RaiseError}, PrintError => $opts{PrintError}, AutoCommit => $opts{AutoCommit} });
 
     if (!defined($db))
       {
         print (STDERR "Unable to open database file $dbname: " . $db->errstr . "\n");
         exit(1);
       }
+
+    # Open without upgrading db.
+    # Useful for second connections to avoid overhead.
+    # Have to do this before pragmas otherwise we seem
+    # to deadlock as it tries to change db parameters.
+    if ($opts{noupgrade}) {
+        return $db
+    }
 
     #
     # SQLite specific optimizations (if it works, it works)
@@ -4743,7 +4754,7 @@ sub DB_open_local {
     $db->do("PRAGMA page_size=4096");
     $db->do("PRAGMA auto_vacuum=2");
     $db->do("PRAGMA journal_mode=WAL");
-    $db->{'AutoCommit'} = 0;
+    $db->{'AutoCommit'} = $opts{AutoCommit};
 
     #
     # Create settings tables if needed
@@ -5032,7 +5043,7 @@ sub DB_settingsGet
     my $sth = $db->prepare_cached($sql);
     if (!defined($sth))
       {
-        print (STDERR "Unexpected error when preparing statement ($sql): " . $DBH->errstr . "\n");
+        print (STDERR "Unexpected error when preparing statement ($sql): " . $db->errstr . "\n");
         exit(1);
       }
 
