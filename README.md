@@ -262,7 +262,7 @@ tv_grab_az_sdjson_sqlite --no-prune --output out.xml --days 10 --channel-regex="
 mythfilldatabase --file --xmlfile out.xml --sourceid 1
 ```
 
-# Then I run it for the other channels and prune the database of expired records:
+Then I run it for the other channels and prune the database of expired records:
 ```shell-script
 tv_grab_az_sdjson_sqlite --no-download --cache-purge-expired --output out2.xml--days 3 --channel-exclude-regex="$CHREGEX" $COMMONARGS
 mythfilldatabase --file --xmlfile out.xml --sourceid 1
