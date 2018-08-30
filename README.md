@@ -40,7 +40,6 @@ Categories: Episode, Series, Show, Sitcom.
 ====
 
 
-
 Local Caching of Formatted Data
 -------------------------------
 
@@ -204,3 +203,42 @@ network but could be a "repeat" on a different network. Similarly,
 some networks mark programmes as "new" based on the timeslot.  So a
 programme could be "new" at 9pm and the same episode could also be
 "new" the following day at 2am.
+
+
+How Do You (Personally) Run This Program?
+-----------------------------------------
+
+I like to have long listings on channels I watch, and shorter listings
+on all the other channels such as shopping.
+
+For mythtv/mythweb, I like to have artwork injected in the description.
+
+I use File caching backend (which stores the cache in /tmp) since I
+have a tmpfs backed by SSD and it seems a bit faster than Redis on my
+system.
+
+So I have a script that is run via crontab. It is similar to:
+
+```shell-script
+#! /bin/sh
+CHREGEX="BBC|Movie|Film|Sony"
+COMMONARGS="--config-file sd.conf --merge-split=5 --artwork-max-width=720 --update-description-with-all --update-description-with-artwork --update-previously-shown-with-year --cache-driver=File --cache-ignore-unchanged-programmes --benchmark --cache-ignore-unchanged-programmes"
+tv_grab_az_sdjson_sqlite --no-prune --output out.xml --days 10 --channel-regex="$CHREGEX" $COMMONARGS
+mythfilldatabase --file --xmlfile out.xml --sourceid 1
+```
+
+# Then I run it for the other channels and prune the database of expired records:
+```shell-script
+tv_grab_az_sdjson_sqlite --no-download --cache-purge-expired --output out2.xml--days 3 --channel-exclude-regex="$CHREGEX" $COMMONARGS
+mythfilldatabase --file --xmlfile out.xml --sourceid 1
+```
+
+For tvheadend, I don't use artwork in the descriptions since its grid doesn't handle them very well:
+```
+tv_grab_az_sdjson_sqlite --cache-purge-expired --output tvh.xml $COMMON_ARGS --no-update-description-with-artwork --cache-namespace-extra=tvh
+nc -w 5 -U /home/hts/.hts/tvheadend/epggrab/xmltv.sock < tvh.xml
+```
+
+Most people don't need this level of complexity and can use the script
+from within the PVR directly, perhaps adding appropriate "extra arguments"
+such as "--artwork-max-width=720 --cache-driver=Redis".
