@@ -2420,8 +2420,9 @@ sub write_programme_details {
         my ($season_num, $episode_num, $max_season_num, $max_episode_num, $season_xmltvns, $episode_xmltvns, $part_xmltvns, $thetvdbSeriesID, $thetvdbEpisodeID) = get_season_episode($pID, $programDetails, $supplementalDetails, $scheduleDetails);
         my $advisories = get_content_advisory($programDetails, $supplementalDetails);
         my ($artURI, $artWidth, $artHeight) = get_artwork_image($pID, $artwork, $supArt);
-        # Additional artwork, normally specific to the episode
-        my ($artURI2, $artWidth2, $artHeight2) = $SD->getEpisodeImageFromArtwork($artwork, 1);
+        # Additional artwork, normally specific to the episode. This is only
+        # used if specific user options have been specified.
+        my ($artURI2, $artWidth2, $artHeight2) = $SD->getEpisodeImageFromArtwork($artwork, 1) if get_option('update-description-with-artwork');
 
         my $mythtv_category;
         if (defined($conf->{'mythtv-categories'}->[0]) &&
