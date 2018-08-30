@@ -153,6 +153,8 @@ Include title details inside the description. So the description will include "P
 This is useful for easier recording regex in some programs.
 * --update-previously-shown-with-year
 Movies often have details of the year they were made but some clients expect those details in the previously-shown field.
+* --benchmark
+Provide details of how long it took to generate files.
 
 Extra Supported Tags and Features
 ---------------------------------

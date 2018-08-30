@@ -129,7 +129,7 @@ use Data::Dumper;
 my $RFC2838_COMPLIANT          = 1;            # RFC2838 compliant station ids, which makes XMLTV
                                                # validate even though the docs say "SHOULD" not "MUST"
 
-my $SCRIPT_VERSION             = '$Id: tv_grab_az_sdjson_sqlite,v 1.37 3976d0 2018/08/29 01:19:00 gtb Exp ed $';
+my $SCRIPT_VERSION             = '$Id: tv_grab_az_sdjson_sqlite,v 1.38 3976d0 2018/08/29 01:19:00 gtb Exp ed $';
 my $SCRIPT_URL                 = 'https://github.com/azlm8t/tv_grab_zz_sdjson_sqlite';
 my $SCRIPT_NAME                = basename("$0");
 my $SCRIPT_NAME_DIR            = dirname("$0");
@@ -275,7 +275,40 @@ my %catmap_minor = (
       preferredmethod => 'allatonce',
       version => "$SCRIPT_VERSION",
       description => 'Multinational (Schedules Direct JSON web services with SQLite DB and local segment caching)',
-      extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s channel-exclude-regex=s use-category-for-keyword! update-description-with-all! update-description-with-credits! update-description-with-categories! update-description-with-year! update-description-with-season-episode! update-description-with-icons! update-description-with-icons-basic! update-description-with-icons-entity! update-description-with-premiere! update-description-with-live! update-description-with-advisory! update-description-with-artwork! update-description-with-stars! update-description-with-rating! update-description-with-title! update-previously-shown-with-year! content-rating-order=s passwordhash=s cache-driver=s cache-namespace-extra=s cache-expiry=s cache-ignore-unchanged-programmes! cache-purge-expired!/],
+      extra_options => [qw/manage-lineups
+                           force-download
+                           download-only
+                           no-download
+                           no-prune
+                           merge-split=n
+                           artwork-max-width=n
+                           channel-regex=s
+                           channel-exclude-regex=s
+                           use-category-for-keyword!
+                           update-description-with-all!
+                           update-description-with-credits!
+                           update-description-with-categories!
+                           update-description-with-year!
+                           update-description-with-season-episode!
+                           update-description-with-icons!
+                           update-description-with-icons-basic!
+                           update-description-with-icons-entity!
+                           update-description-with-premiere!
+                           update-description-with-live!
+                           update-description-with-advisory!
+                           update-description-with-artwork!
+                           update-description-with-stars!
+                           update-description-with-rating!
+                           update-description-with-title!
+                           update-previously-shown-with-year!
+                           content-rating-order=s
+                           passwordhash=s
+                           cache-driver=s
+                           cache-namespace-extra=s
+                           cache-expiry=s
+                           cache-ignore-unchanged-programmes!
+                           cache-purge-expired!
+                           benchmark/],
       defaults => { days => 30 },
     }
   );
@@ -1418,6 +1451,13 @@ exit(0);
 
 
 sub output_xml {
+my $use_benchmark = get_option('benchmark') && !$quiet;
+my ($t_start, $t_end, $t_chanstart, $t_chanend, $t_progstart, $t_progend);
+if ($use_benchmark) {
+    require Benchmark;
+    $t_start = Benchmark->new;
+}
+
 my $w = XML::Writer->new( 'ENCODING' => 'UTF-8',
                           'DATA_MODE' => 1,
                           'DATA_INDENT' => 1,
@@ -1432,16 +1472,35 @@ $w->startTag('tv',
              'source-info-name'      => $SD_DESC,
              'source-info-url'       => $SD_SITEURL );
 
+  $t_chanstart = Benchmark->new if $use_benchmark;
   my $channelsWritten = channelWriter($conf->{'lineup'}->[0], $w);
-  print (STDERR "   $channelsWritten channels processed\n") if (!$quiet);
+  $t_chanend = Benchmark->new if $use_benchmark;
+
+  if ($use_benchmark) {
+      printf (STDERR "   $channelsWritten channels processed took %s\n", Benchmark::timestr(Benchmark::timediff($t_chanend, $t_chanstart))) if (!$quiet);
+  } else {
+      print (STDERR "   $channelsWritten channels processed\n") if (!$quiet);
+  }
+
+  $t_progstart = Benchmark->new if $use_benchmark;
   my $programsWritten = programWriter($w);
-  print (STDERR "   $programsWritten program schedules processed\n") if (!$quiet);
+  $t_progend = $t_end = Benchmark->new if $use_benchmark;
+
+  if ($use_benchmark) {
+      printf (STDERR "   $programsWritten program schedules processed took %s\n", Benchmark::timestr(Benchmark::timediff($t_progend, $t_progstart))) if (!$quiet);
+  } else {
+      print (STDERR "   $programsWritten program schedules processed\n") if (!$quiet);
+  }
+
   printf (STDERR "   $num_prog_from_cache programs retrieved from cache (%0.2f%%)\n", $num_prog_from_cache / $programsWritten * 100) if (!$quiet && $num_prog_from_cache);
   {
       # Unfortunately the "compute" tracks number computed not number from cache,
       # so calculate number from cache here.
       my $num_prog_details_from_cache = $num_prog_details_total - $num_prog_details_not_from_cache;
       printf (STDERR "   %d of %d programs details retrieved from cache (%0.2f%%)\n", $num_prog_details_from_cache, $num_prog_details_total, $num_prog_details_from_cache / $num_prog_details_total * 100) if (!$quiet && $num_prog_details_from_cache > 0);
+  }
+  if ($use_benchmark) {
+      printf (STDERR "   xmltv generation took %s\n", Benchmark::timestr(Benchmark::timediff($t_end, $t_start))) if (!$quiet);
   }
 
   $w->endTag('tv');
