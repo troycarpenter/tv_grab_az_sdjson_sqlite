@@ -128,7 +128,7 @@ use Data::Dumper;
 my $RFC2838_COMPLIANT          = 1;            # RFC2838 compliant station ids, which makes XMLTV
                                                # validate even though the docs say "SHOULD" not "MUST"
 
-my $SCRIPT_VERSION             = '$Id: tv_grab_az_sdjson_sqlite,v 1.36 3976d0 2018/08/29 01:19:00 gtb Exp ed $';
+my $SCRIPT_VERSION             = '$Id: tv_grab_az_sdjson_sqlite,v 1.37 3976d0 2018/08/29 01:19:00 gtb Exp ed $';
 my $SCRIPT_URL                 = 'https://github.com/azlm8t/tv_grab_zz_sdjson_sqlite';
 my $SCRIPT_NAME                = basename("$0");
 my $SCRIPT_NAME_DIR            = dirname("$0");
@@ -273,7 +273,7 @@ my %catmap_minor = (
       load_old_config_sub => \&loadOldConfig,
       preferredmethod => 'allatonce',
       version => "$SCRIPT_VERSION",
-      description => 'Multinational (Schedules Direct JSON web services with SQLite DB)',
+      description => 'Multinational (Schedules Direct JSON web services with SQLite DB and local segment caching)',
       extra_options => [qw/manage-lineups force-download download-only no-download no-prune merge-split=n artwork-max-width=n channel-regex=s channel-exclude-regex=s use-category-for-keyword! update-description-with-all! update-description-with-credits! update-description-with-categories! update-description-with-year! update-description-with-season-episode! update-description-with-icons! update-description-with-icons-basic! update-description-with-icons-entity! update-description-with-premiere! update-description-with-live! update-description-with-advisory! update-description-with-artwork! update-description-with-stars! update-description-with-rating! update-description-with-title! update-previously-shown-with-year! content-rating-order=s passwordhash=s cache-driver=s cache-namespace-extra=s cache-expiry=s cache-ignore-unchanged-programmes! cache-purge-expired!/],
       defaults => { days => 30 },
     }
