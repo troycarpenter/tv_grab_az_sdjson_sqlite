@@ -109,6 +109,7 @@ use File::Basename;
 use File::Which;
 use File::HomeDir;
 use File::Path qw(make_path);
+use File::Spec::Functions qw(catdir tmpdir);
 use DateTime;
 use DateTime::TimeZone;
 use DateTime::Format::ISO8601;
@@ -1708,6 +1709,7 @@ sub get_cache_object {
     require CHI;
     $cache = CHI->new(driver => $driver,
                       namespace => get_cache_namespace,
+                      root_dir => catdir(tmpdir(), "tv_grab_az.chi-driver-file.$<"), # For CHI::Driver::File ensure we have one per uid
                       # We want the backend caching server to
                       # expire data even if we are not run.
                       expires_on_backend => 1,
@@ -1729,6 +1731,7 @@ sub get_cache_object_for_programme_details {
     require CHI;
     $cache = CHI->new(driver => get_option('cache-driver'),
                       namespace => "pd." . get_cache_namespace(),
+                      root_dir => catdir(tmpdir(), "tv_grab_az.chi-driver-file.$<"), # For CHI::Driver::File ensure we have one per uid
                       expires_on_backend => 1,
                       # We use an l1 cache since programme details are often repeated.
                       # For example "Night News" will be on every day, and shows are
