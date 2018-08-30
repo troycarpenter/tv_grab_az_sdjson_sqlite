@@ -1,6 +1,15 @@
 # tv_grab_az_sdjson_sqlite
 XMLTV grabber for Schedules Direct JSON service with local caching of xmltv output.
 
+Overview
+--------
+
+This program grabs schedule information from SchedulesDirect and
+creates an xmltv file for use by PVRs (such as Tvheadend and
+MythTV). You need a SchedulesDirect account for this program to work.
+Information from SchedulesDirect is stored in a local SQLite database.
+Generated information can also be cached locally to improve performance.
+
 This program adds a number of extra features for updating the description with extra information.
 This is useful because many GUIs do not readily display details about programmes such as season
 and episode information or cast information.
@@ -43,6 +52,10 @@ Categories: Episode, Series, Show, Sitcom.
 Local Caching of Formatted Data
 -------------------------------
 
+This is an experimental feature. That means the options may change or
+be removed in future releases and the generated output has not been
+rigorously tested.
+
 Local caching of formatted programme data can be enabled.
 This will cache xmltv output to a local server such as to Redis.
 The sqlite database (containing details of downloaded data)
@@ -57,6 +70,10 @@ running locally.
 The cache can then be used via the extra arguments:
 "--cache-driver=Redis"
 
+Other Perl CHI drivers can be used, but are not rigorously tested
+such as:
+"--cache-driver=File"
+
 The first time the programme is run, the formatted output is cached.
 On the second and subsequent runs, the cache is checked, and if the
 formatted output is cached, then it is retrieved.
@@ -65,15 +82,18 @@ With multiple days and hundreds of channels, this can significantly
 reduce overhead. On my test system, it reduced the run time from 134
 seconds to 14 seconds.
 
-To check that caching is occurring, you can use "redis-cli stat"
+To check that redis caching is occurring, you can use "redis-cli stat"
 to monitor keys/memory usage of the redis server. The server
 must have enough space to hold the cached data (maxmemory setting
 in the redis server's redis.conf).
 
+File caching is an alternative to redis and can be used if you have a
+fast filesystem.
+
 * --cache-driver
 Currently only "Redis" is tested and needs the extra Perl modules
 installed. The "File" backend appears to work but requires a fast
-drive/tmpfs to provide peak performance and needs File would need the
+drive/tmpfs to provide peak performance and File would need the
 "--cache-purge-expired" option to ensure old entries are expired.
 * --cache-namespace-extra
 Extra text to use when generating a cache namespace.  This is used if
@@ -119,6 +139,14 @@ This is useful since many movies have multiple ratings but many systems only tak
 The default is based on US ratings, with fallbacks to other countries.
 * --use-category-for-keyword
 Instead of outputting keyword tags, output category tags instead. Useful for programs that cannot parse keywords.
+
+Extra Options for Updating Description
+--------------------------------------
+
+These options alter the programme's description. This can be useful since
+some frontends do not display programme year, age rating, season, episode,
+star rating, or other information in some views.
+
 * --update-description-with-all
 Enable all the below "update-description-with-" options except for --update-description-with-icons, --update-description-with-icons-basic, --update-description-with-icons-entity and --update-description-with-artwork.
 * --update-description-with-credits
@@ -159,6 +187,7 @@ Provide details of how long it took to generate files.
 Extra Supported Tags and Features
 ---------------------------------
 
+The program has a few features that are enabled without user configuration options:
 * Prefer ttvdb episode numbers if they differ from Gracenote episode numbers. This is useful since most metadata lookups use ttvdb episode numbers which can often be different.
 * Download artwork for programmes.
 * Support multiple xmltv episode number formats include series/ and episode/ formats.
@@ -166,6 +195,7 @@ Extra Supported Tags and Features
 
 Extra Packages Required
 -----------------------
+
 A list of extra (potentially non-standard) packages you may need to install is below:
 
 - DateTime::Format::SQLite
@@ -218,6 +248,9 @@ For mythtv/mythweb, I like to have artwork injected in the description.
 I use File caching backend (which stores the cache in /tmp) since I
 have a tmpfs backed by SSD and it seems a bit faster than Redis on my
 system.
+
+I imagine zfs might be a reasonable alternative filesystem for caching
+if "sync=disabled" is set on the volume.
 
 So I have a script that is run via crontab. It is similar to:
 
