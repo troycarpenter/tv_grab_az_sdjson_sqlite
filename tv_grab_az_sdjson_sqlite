@@ -449,6 +449,8 @@ print (STDERR "Downloading data from Schedules Direct\n") if (!$quiet);
 # list-lineups.
 my $fetchLineupRequired = lineupFetchAndValidate($conf);
 
+my $use_benchmark = use_benchmark();
+my $t_downloadstart = Benchmark->new if $use_benchmark;
 # We do this sequentially for the moment since we are
 # checking for lineups that are out of date or never
 # downloaded and then figuring out schedule hashes.
@@ -1245,6 +1247,10 @@ for (my $retry = 0; $retry < 7; $retry++)
   }
 } # for each lineup, download schedule hash and program details
 
+if ($use_benchmark) {
+    my $t_downloadend = Benchmark->new;
+    print_benchmark($t_downloadstart, $t_downloadend, "Download took %s\n") if !$quiet;
+}
 
 #
 # Process data and report
@@ -1397,8 +1403,6 @@ my $crewMap =
 #
 
 finalize:
-
-my $use_benchmark = use_benchmark();
 
 if (!$opt->{'no-prune'}) {
     my ($t_prunestart, $t_pruneend);
