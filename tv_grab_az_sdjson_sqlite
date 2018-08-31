@@ -1419,15 +1419,27 @@ my $crewMap =
 
 finalize:
 
+my $use_benchmark = get_option('benchmark') && !$quiet;
+
+if ($use_benchmark) {
+    require Benchmark;
+}
+
 if (!$opt->{'no-prune'}) {
+    my ($t_prunestart, $t_pruneend);
     print (STDERR "Pruning the local database\n") if (!$quiet);
+    $t_prunestart = Benchmark->new if $use_benchmark;
     DB_prune();
+    $t_pruneend = Benchmark->new if $use_benchmark;
+    print_benchmark($t_prunestart, $t_pruneend, "Pruning took %s\n") if !$quiet && $use_benchmark;
 }
 
 # Backends such as Redis handle expiry themselves so this option
 # should not be used for them. However, some backends require
 # that we call purge.
 if (get_option('cache-purge-expired') && is_cache_enabled()) {
+    my ($t_purgestart, $t_purgeend);
+    $t_purgestart = Benchmark->new if $use_benchmark;
     print STDERR "Purging cache of expired entries (not needed for many backends that handle expiry such as Redis).\n" if !$quiet;
     # We need to eval since some backends do not handle purge.
     # Backends such as File have a very inefficient purge and its typically
@@ -1441,10 +1453,15 @@ if (get_option('cache-purge-expired') && is_cache_enabled()) {
     if (my $err = @_) {
         print STDERR "Failed to purge cache: $err\n";
     }
+    $t_purgeend = Benchmark->new if $use_benchmark;
+    print_benchmark($t_purgestart, $t_purgeend, "Purging took %s\n") if !$quiet && $use_benchmark;
 }
 exit(0);
 
-
+sub print_benchmark {
+    my ($start, $end, $text) = @_;
+    printf STDERR $text, Benchmark::timestr(Benchmark::timediff($end, $start));
+}
 
 sub output_xml {
 my $use_benchmark = get_option('benchmark') && !$quiet;
