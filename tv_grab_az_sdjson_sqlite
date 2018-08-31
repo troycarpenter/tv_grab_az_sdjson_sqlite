@@ -1497,7 +1497,7 @@ $w->startTag('tv',
              'source-info-url'       => $SD_SITEURL );
 
   $t_chanstart = Benchmark->new if $use_benchmark;
-  my $channelsWritten = channelWriter($conf->{'lineup'}->[0], $w);
+  my $channelsWritten = channelWriter($conf->{'lineup'}, $w);
   $t_chanend = Benchmark->new if $use_benchmark;
 
   if ($use_benchmark) {
@@ -3274,6 +3274,51 @@ sub configureGrabber
     return $result;
   }
 
+sub lineupFetchAndValidate {
+    my ($conf) = @_;
+    #
+    # If we are downloading, allow for optimization
+    #
+    if ($download)
+      {
+          print (STDERR "Obtaining authentication token for Schedules Direct\n") if (!$quiet);
+        SD_login();
+        $fetchLineupRequired |= SD_isLineupFetchRequired($_) for @{$conf->{lineup}};
+
+        if ($fetchLineupRequired)
+          {
+            print (STDERR "Downloading lineups from Schedules Direct\n") if (!$quiet);
+            SD_downloadLineups() if ($download);
+          }
+        else
+          {
+            print (STDERR "not downloading lineups from Schedules Direct (data current)\n") if (!$quiet);
+          }
+
+        #
+        # Need to validate here to not try to download maps
+        # for lineups not in account (which would throw error)
+        #
+        for my $lineup(@{$conf->{lineup}}) {
+            lineupValidate($lineup);
+
+            if ($fetchLineupRequired)
+              {
+                  print (STDERR "Downloading channels stations for lineup $lineup\n") if (!$quiet);
+                  SD_downloadLineupMaps($lineup) if ($download);
+              }
+            else
+              {
+                  print (STDERR "not downloading channel and station maps for lineup $lineup (data current)\n") if (!$quiet);
+              }
+        }
+    }
+    else
+      {
+          lineupValidate($_) for @{$conf->{lineup}};
+      }
+}
+
 #
 # listChannels
 #
@@ -3309,46 +3354,7 @@ sub listChannels
         DB_clean();
       }
 
-    #
-    # If we are downloading, allow for optimization
-    #
-    if ($download)
-      {
-        print (STDERR "Obtaining authentication token for Schedules Direct\n") if (!$quiet);
-        SD_login();
-
-        $fetchLineupRequired = SD_isLineupFetchRequired($conf->{'lineup'}->[0]);
-
-        if ($fetchLineupRequired)
-          {
-            print (STDERR "Downloading lineups from Schedules Direct\n") if (!$quiet);
-            SD_downloadLineups() if ($download);
-          }
-        else
-          {
-            print (STDERR "Not downloading lineups from Schedules Direct (data current)\n") if (!$quiet);
-          }
-
-        #
-        # Need to validate here to not try to download maps
-        # for lineups not in account (which would throw error)
-        #
-        lineupValidate($conf->{'lineup'}->[0]);
-
-        if ($fetchLineupRequired)
-          {
-            print (STDERR "Downloading channels stations for lineup " . $conf->{'lineup'}->[0] . "\n") if (!$quiet);
-            SD_downloadLineupMaps($conf->{'lineup'}->[0]) if ($download);
-          }
-        else
-          {
-            print (STDERR "Not downloading channel and station maps for lineup " . $conf->{'lineup'}->[0] . " (data current)\n") if (!$quiet);
-          }
-      }
-    else
-      {
-        lineupValidate($conf->{'lineup'}->[0]);
-      }
+    lineupFetchAndValidate($conf);
 
     my $w = XML::Writer->new( 'ENCODING' => 'UTF-8',
                               'DATA_MODE' => 1,
@@ -3363,7 +3369,7 @@ sub listChannels
                  'source-info-name'      => $SD_DESC,
                  'source-info-url'       => $SD_SITEURL );
 
-    my $channelsWritten = channelWriter($conf->{'lineup'}->[0], $w);
+    my $channelsWritten = channelWriter($conf->{'lineup'}, $w);
 
     $w->endTag('tv');
     $w->end();
@@ -3372,6 +3378,27 @@ sub listChannels
 
     return(encode('UTF-8', $w->to_string));
   }
+
+
+# Generate text and bind variables suitable for lineups in the configuration file.
+sub sql_generate_lineup_query {
+    my ($lineupRef) = @_;
+    $lineupRef = $conf->{lineup} unless $lineupRef;
+    die "We do not have any lineups" unless scalar @$lineupRef;
+    my @sql;
+    my @bind;
+    for my $lineup (@$lineupRef) {
+        push @sql, '?';
+        push @bind, $lineup;
+    }
+    # Optimize common use-case of only having one lineup.
+    if (scalar @sql == 1) {
+        return ("lineup = ?", @bind);
+    } else {
+        my $query = join ', ', @sql;
+        return ("lineup in ($query)", @bind);
+    }
+}
 
 #
 # channelWriter
@@ -3387,7 +3414,7 @@ sub listChannels
 #
 sub channelWriter
   {
-    my ($lineup, $writer, undef) = @_;
+    my ($lineupRef, $writer, undef) = @_;
 
     my $sql;
     my $sth;
@@ -3396,15 +3423,15 @@ sub channelWriter
     #
     # Collect some lineup information
     #
-    $sql = "select lineup, name, transport, location, details from lineups where lineup = ?";
+    my ($lineupsql, @bind) = sql_generate_lineup_query($lineupRef);
+    $sql = "select lineup, name, transport, location, details from lineups where $lineupsql";
     $sth = $DBH->prepare_cached($sql);
     if (!defined($sth))
       {
         print (STDERR "Unexpected error when preparing statement ($sql): " . $DBH->errstr . "\n");
         exit(1);
       }
-    $sth->bind_param( 1, $lineup, SQL_VARCHAR );
-    $sth->execute();
+    $sth->execute(@bind);
     if ($sth->err())
       {
         print (STDERR "Unexpected error when executing statement ($sql): " . $sth->errstr . "\n");
@@ -3423,7 +3450,7 @@ sub channelWriter
     #
     # Select our lineup channels/stations
     #
-    $sql = "select channels.station, channels.channum, channels.details, stations.details from channels as channels left join stations as stations on stations.station = channels.station where channels.lineup = ? and channels.selected = 1";
+    $sql = "select channels.station, channels.channum, channels.details, stations.details from channels as channels left join stations as stations on stations.station = channels.station where $lineupsql and channels.selected = 1";
 
     $sth = $DBH->prepare_cached($sql);
     if (!defined($sth))
@@ -3432,9 +3459,7 @@ sub channelWriter
         exit(1);
       }
 
-    $sth->bind_param( 1, $lineup, SQL_VARCHAR );
-
-    $sth->execute();
+    $sth->execute(@bind);
 
     if ($sth->err())
       {
@@ -3655,52 +3680,14 @@ sub getLineup
         DB_clean();
       }
 
-    #
-    # If we are downloading, allow for optimization
-    #
-    if ($download)
-      {
-        print (STDERR "Obtaining authentication token for Schedules Direct\n") if (!$quiet);
-        SD_login();
-
-        $fetchLineupRequired = SD_isLineupFetchRequired($conf->{'lineup'}->[0]);
-
-        if ($fetchLineupRequired)
-          {
-            print (STDERR "Downloading lineups from Schedules Direct\n") if (!$quiet);
-            SD_downloadLineups() if ($download);
-          }
-        else
-          {
-            print (STDERR "not downloading lineups from Schedules Direct (data current)\n") if (!$quiet);
-          }
-
-        #
-        # Need to validate here to not try to download maps
-        # for lineups not in account (which would throw error)
-        #
-        lineupValidate($conf->{'lineup'}->[0]);
-
-        if ($fetchLineupRequired)
-          {
-            print (STDERR "Downloading channels stations for lineup " . $conf->{'lineup'}->[0] . "\n") if (!$quiet);
-            SD_downloadLineupMaps($conf->{'lineup'}->[0]) if ($download);
-          }
-        else
-          {
-            print (STDERR "not downloading channel and station maps for lineup " . $conf->{'lineup'}->[0] . " (data current)\n") if (!$quiet);
-          }
-      }
-    else
-      {
-        lineupValidate($conf->{'lineup'}->[0]);
-      }
-
+    lineupFetchAndValidate($conf);
     #
     # Collect some lineup information
     #
 
-    my $sql = "select lineup, name, transport, location, details from lineups where lineup = ?";
+    my ($lineupsql, @bind) = sql_generate_lineup_query();
+
+    my $sql = "select lineup, name, transport, location, details from lineups where $lineupsql";
 
     my $sth = $DBH->prepare_cached($sql);
     if (!defined($sth))
@@ -3709,9 +3696,7 @@ sub getLineup
         exit(1);
       }
 
-    $sth->bind_param( 1, $conf->{'lineup'}->[0], SQL_VARCHAR );
-
-    $sth->execute();
+    $sth->execute(@bind);
 
     if ($sth->err())
       {
