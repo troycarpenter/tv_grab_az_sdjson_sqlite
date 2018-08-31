@@ -756,7 +756,7 @@ for (my $retry = 0; $retry < 7; $retry++)
             $downloadQueued = 1;
             next;
           }
-
+        my %errs;
         foreach my $sched(@{$r})
           {
             my $hash;
@@ -765,6 +765,7 @@ for (my $retry = 0; $retry < 7; $retry++)
             my $code = $sched->{'code'} || 0;
             if ($code != 0)
               {
+                ++$errs{$code};
                 if ($code == 7100)
                   {
                     $downloadQueued = 1;
@@ -830,6 +831,12 @@ for (my $retry = 0; $retry < 7; $retry++)
                  exit(1);
               }
           }
+        # We had some SCHEDULE_NOT_IN_LINEUP errors (7030) that (from a user POV)
+        # are invisible and just cause repeated downloads, so ensure we log any errors.
+        if (!$quiet && scalar keys %errs) {
+            printf STDERR "...Received %d unique error codes from SD during this chunk\n", scalar keys %errs;
+            print STDERR  "......SD Error Code: $_ Count: $errs{$_}\n" for sort keys %errs;
+        }
 
         $DBH->commit();
       }
