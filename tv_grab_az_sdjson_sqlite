@@ -407,7 +407,7 @@ if ($opt->{'force-download'})
 #
 if (!$download)
   {
-    lineupValidate($conf->{'lineup'}->[0]);
+    lineupValidate($_) for @{$conf->{lineup}};
     goto skipDownload;
   }
 
@@ -424,6 +424,7 @@ if (!defined($expiry))
     print (STDERR "Unable to obtain the account expiration date: " . $SD->ErrorString . "\n");
     exit(1);
   }
+# lastDateUpdated (from SD status) is across all lineups.
 my $dataLastUpdated = $SD->obtainDataLastUpdated;
 if (!defined($dataLastUpdated))
   {
@@ -443,46 +444,15 @@ SD_cleanLineups();
 #
 print (STDERR "Downloading data from Schedules Direct\n") if (!$quiet);
 
-#
-# We can avoid downloading lineup and map information
-# if we have updated our maps more recently than the
-# account lineup information indicates
-#
-my $fetchLineupRequired = SD_isLineupFetchRequired($conf->{'lineup'}->[0]);
+# We used to fetch unconditionally here, now it's done
+# based on $download to be compatible with list-channels and
+# list-lineups.
+my $fetchLineupRequired = lineupFetchAndValidate($conf);
 
-#
-# Get our current Schedules Direct lineups and feed to our DB
-# and validate that our configured lineup is still available
-#
-if ($fetchLineupRequired)
-  {
-    print (STDERR "   downloading account lineups from Schedules Direct\n") if (!$quiet);
-    SD_downloadLineups();
-  }
-else
-  {
-    print (STDERR "   not downloading lineups from Schedules Direct (data current)\n") if (!$quiet);
-  }
-
-#
-# Validate that the configured lineup exists in our database
-#
-lineupValidate($conf->{'lineup'}->[0]);
-
-#
-# Get our current Schedules Direct maps (channels and
-# stations) for our lineup and feed to our DB
-#
-if ($fetchLineupRequired)
-  {
-    print (STDERR "   downloading channel and station maps for lineup " . $conf->{'lineup'}->[0] . "\n") if (!$quiet);
-    SD_downloadLineupMaps($conf->{'lineup'}->[0]);
-  }
-else
-  {
-    print (STDERR "   not downloading channel and station maps for lineup " . $conf->{'lineup'}->[0] . " (data current)\n") if (!$quiet);
-  }
-
+# We do this sequentially for the moment since we are
+# checking for lineups that are out of date or never
+# downloaded and then figuring out schedule hashes.
+for my $lineup (@{$conf->{lineup}}) {
 #
 # We can skip downloading station schedules if our data is current
 #
@@ -497,9 +467,9 @@ if (!defined($sth))
     exit(1);
   }
 
-$sth->bind_param( 1, $conf->{'lineup'}->[0], SQL_VARCHAR );
+$sth->bind_param( 1, $lineup, SQL_VARCHAR );
 $sth->bind_param( 2, DateTime::Format::SQLite->format_datetime($dataLastUpdatedDateTime), SQL_DATETIME );
-$sth->bind_param( 3, $conf->{'lineup'}->[0], SQL_VARCHAR );
+$sth->bind_param( 3, $lineup, SQL_VARCHAR );
 
 $sth->execute();
 
@@ -515,7 +485,7 @@ $sth->finish();
 
 if ((!$fetchStationSchedulesRequired) && (!$fetchLineupRequired))
   {
-    print (STDERR "   not downloading station schedule hashes (data current)\n") if (!$quiet);
+    print (STDERR "   not downloading station schedule hashes for $lineup (data current)\n") if (!$quiet);
   }
 else
   {
@@ -541,7 +511,7 @@ else
         exit(1);
       }
 
-    $sth->bind_param( 1, $conf->{'lineup'}->[0], SQL_VARCHAR );
+    $sth->bind_param( 1, $lineup, SQL_VARCHAR );
 
     $sth->execute();
 
@@ -634,7 +604,7 @@ else
         exit(1);
       }
     $sth->bind_param( 1, $nowDateTimeSQLite, SQL_DATETIME );
-    $sth->bind_param( 2, $conf->{'lineup'}->[0], SQL_VARCHAR );
+    $sth->bind_param( 2, $lineup, SQL_VARCHAR );
     $sth->execute();
     if ($sth->err())
       {
@@ -643,6 +613,13 @@ else
       }
     $DBH->commit();
   }
+# We _should_ be able to end the "for each lineup" here
+# and then do the remaining fetch across all lineups.
+# But, for the moment, we'll do it all per-lineup
+# since difference in performance should be negligible
+# vs. risk of errors.
+####} # for each lineup, download schedule hashes.
+
 
 #
 # Obtain the station schedules for days for which we do
@@ -685,7 +662,7 @@ for (my $retry = 0; $retry < 7; $retry++)
         exit(1);
       }
 
-    $sth->bind_param( 1, $conf->{'lineup'}->[0], SQL_VARCHAR );
+    $sth->bind_param( 1, $lineup, SQL_VARCHAR );
     $sth->bind_param( 2, DateTime::Format::SQLite->format_date($startDateTime), SQL_DATE );
     $sth->bind_param( 3, DateTime::Format::SQLite->format_date($endDateTime), SQL_DATE );
 
@@ -898,7 +875,7 @@ for (my $retry = 0; $retry < 7; $retry++)
         exit(1);
       }
 
-    $sth->bind_param( 1, $conf->{'lineup'}->[0], SQL_VARCHAR );
+    $sth->bind_param( 1, $lineup, SQL_VARCHAR );
     $sth->bind_param( 2, DateTime::Format::SQLite->format_date($startDateTime), SQL_DATE );
     $sth->bind_param( 3, DateTime::Format::SQLite->format_date($endDateTime), SQL_DATE );
 
@@ -1046,7 +1023,7 @@ for (my $retry = 0; $retry < 7; $retry++)
         exit(1);
       }
 
-    $sth->bind_param( 1, $conf->{'lineup'}->[0], SQL_VARCHAR );
+    $sth->bind_param( 1, $lineup, SQL_VARCHAR );
     $sth->bind_param( 2, DateTime::Format::SQLite->format_date($startDateTime), SQL_DATE );
     $sth->bind_param( 3, DateTime::Format::SQLite->format_date($endDateTime), SQL_DATE );
 
@@ -1265,6 +1242,7 @@ for (my $retry = 0; $retry < 7; $retry++)
     # We are done unless one (or more) entities indicate that the server queued the request
     last if (!$downloadQueued);
   }
+} # for each lineup, download schedule hash and program details
 
 
 #
@@ -1547,6 +1525,7 @@ sub programWriter {
   # it is a necessary compromise
   #
 
+  my ($lineupsql, @bind) = sql_generate_lineup_query();
   my $sql = "select schedules.station, schedules.starttime, schedules.duration, schedules.program, schedules.details, programs.details, strftime('%Y%m%d%H%M%S', schedules.starttime), strftime('%Y%m%d%H%M%S', datetime(schedules.starttime, '+' || schedules.duration || ' seconds')), stations.details, supplemental.details, NULL, NULL, programs.hash as prog_hash, supplemental.hash as sup_hash, programs.program_supplemental
 
 from
@@ -1555,7 +1534,7 @@ left join stations as stations on stations.station = schedules.station
 left join programs as supplemental on programs.program_supplemental = supplemental.program
 
 where
-schedules.station in (select distinct stations.station from stations as stations where stations.station in ( select distinct channels.station from channels as channels where channels.lineup = ? and channels.selected = 1))
+schedules.station in (select distinct stations.station from stations as stations where stations.station in ( select distinct channels.station from channels as channels where $lineupsql and channels.selected = 1))
 AND schedules.day >= ?
 and schedules.day < ?
 
@@ -1574,11 +1553,10 @@ order by schedules.station, schedules.starttime";
   my $startDay = DateTime->now(time_zone => 'UTC')->add(days => $opt->{'offset'});
   my $endDay = DateTime->now(time_zone => 'UTC')->add(days => $opt->{'offset'})->add(days => $opt->{'days'});
 
-  $sth->bind_param( 1, $conf->{'lineup'}->[0], SQL_VARCHAR );
-  $sth->bind_param( 2, DateTime::Format::SQLite->format_date($startDay), SQL_DATE );
-  $sth->bind_param( 3, DateTime::Format::SQLite->format_date($endDay), SQL_DATE );
+  push @bind, $startDay;        # is an SQL_DATE
+  push @bind, $endDay;          # is an SQL_DATE
 
-  $sth->execute();
+  $sth->execute(@bind);
 
   if ($sth->err())
     {
@@ -3276,6 +3254,8 @@ sub configureGrabber
 
 sub lineupFetchAndValidate {
     my ($conf) = @_;
+    my $fetchLineupRequired = 0;
+
     #
     # If we are downloading, allow for optimization
     #
@@ -3317,6 +3297,7 @@ sub lineupFetchAndValidate {
       {
           lineupValidate($_) for @{$conf->{lineup}};
       }
+    return $fetchLineupRequired;
 }
 
 #
