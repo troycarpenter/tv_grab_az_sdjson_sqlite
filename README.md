@@ -48,6 +48,30 @@ Categories: Episode, Series, Show, Sitcom.
 
 ====
 
+Support for Multiple Lineups
+----------------------------
+
+This is an experimental feature. That means the options may change or
+be removed in future releases and the generated output has not been
+rigorously tested.
+
+Some countries require multiple SD channel lineups to populate all the
+channels that can be received by one tuner.
+
+To support this, the configuration file can be manually edited
+to add multiple "lineup=" lines.
+
+For example if your configuration file contained "lineup=XXX-1234-DEFAULT"
+then you could alter it to be:
+```conf
+lineup=XXX-1234-DEFAULT
+lineup=XXX-4567-DEFAULT
+lineup=XXX-890A-DEFAULT
+```
+Then the three lineups are fetched and all the channels and programmes
+from all three lineups are output in the same xmltv output file.
+
+Note that the program's UI does not support multiple lineups.
 
 Local Caching of Formatted Data
 -------------------------------
