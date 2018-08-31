@@ -4931,7 +4931,7 @@ sub DB_open_local {
           }
 
         $version = 1;
-        DB_settingsSet('version', 1);
+        DB_settingsSet($db, 'version', 1);
         $db->commit();
       }
 
@@ -5006,7 +5006,7 @@ sub DB_open_local {
                 $db->rollback();
                 exit(1);
               }
-            DB_settingsSet('version', $version);
+            DB_settingsSet($db, 'version', $version);
             $db->commit();
         }
 
@@ -5025,7 +5025,7 @@ sub DB_open_local {
                     exit(1);
                 }
 
-              DB_settingsSet('version', $version);
+              DB_settingsSet($db, 'version', $version);
               $db->commit();
           }
 
@@ -5035,7 +5035,7 @@ sub DB_open_local {
         ##      $version = 3;
         ##      print (STDERR "Updating database to version $version\n") if (!$quiet);
         ##      ## Alter table, create index, ?
-        ##      DB_settingsSet('version', $version);
+        ##      DB_settingsSet($db, 'version', $version);
         ##      $db->commit();
         ##    }
       }
@@ -5105,14 +5105,14 @@ sub DB_settingsGet
 #
 sub DB_settingsSet
   {
-    my ($tag, $value, undef) = @_;
+    my ($db, $tag, $value, undef) = @_;
 
     my $sql = "replace into settings (tag, value) values (?, ?)";
 
-    my $sth = $DBH->prepare_cached($sql);
+    my $sth = $db->prepare_cached($sql);
     if (!defined($sth))
       {
-        print (STDERR "Unexpected error when preparing statement ($sql): " . $DBH->errstr . "\n");
+        print (STDERR "Unexpected error when preparing statement ($sql): " . $db->errstr . "\n");
         exit(1);
       }
 
@@ -5124,7 +5124,7 @@ sub DB_settingsSet
     if ($sth->err)
       {
         print (STDERR "Unexpected error when executing statement ($sql): " . $sth->errstr . "\n");
-        $DBH->rollback();
+        $db->rollback();
         exit(1);
       }
 
@@ -5806,7 +5806,7 @@ sub manageLineups
                 $prompt .= "Database initialized.\n";
               }
 
-            DB_settingsSet('username', $username);
+            DB_settingsSet($DBH, 'username', $username);
 
             my $storehash = ask_boolean(
                               "\n" .
@@ -5829,12 +5829,12 @@ sub manageLineups
 
             if ($storehash)
               {
-                DB_settingsSet('passwordhash', $passwordhash);
+                DB_settingsSet($DBH, 'passwordhash', $passwordhash);
                 $prompt .= "Schedules Direct username/passwordhash stored in database";
               }
             else
               {
-                DB_settingsSet('passwordhash', undef);
+                DB_settingsSet($DBH, 'passwordhash', undef);
                 $prompt .= "Schedules Direct Username stored in database";
               }
             $DBH->commit();
