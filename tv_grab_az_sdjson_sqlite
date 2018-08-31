@@ -1436,7 +1436,9 @@ if (!$opt->{'no-prune'}) {
 if (get_option('cache-purge-expired') && is_cache_enabled()) {
     my ($t_purgestart, $t_purgeend);
     $t_purgestart = Benchmark->new if $use_benchmark;
-    print STDERR "Purging cache of expired entries (not needed for many backends that handle expiry such as Redis).\n" if !$quiet;
+    my  $warn = "";
+    $warn = " (not needed for many backends that handle expiry such as Redis)" if get_option('cache-driver') eq 'Redis';
+    print STDERR "Purging cache of expired entries$warn.\n" if !$quiet;
     # We need to eval since some backends do not handle purge.
     # Backends such as File have a very inefficient purge and its typically
     # recommended to use "find" to delete obsolete files.
