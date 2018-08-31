@@ -119,14 +119,14 @@ Currently only "Redis" is tested and needs the extra Perl modules
 installed. The "File" backend appears to work but requires a fast
 drive/tmpfs to provide peak performance and File would need the
 "--cache-purge-expired" option to ensure old entries are expired.
-* --cache-namespace-extra
+* --cache-namespace-extra=str
 Extra text to use when generating a cache namespace.  This is used if
 you run the programme multiple times and alter options that affect the
 generated output. For example if you run it with
 --update-description-with-icons on one run, and with
 --no-update-description-with-icons on a second run then you should specify
 a different caching namespace to avoid retrieving incorrect programme details.
-* --cache-expiry
+* --cache-expiry=n
 String specifying expiry to use. By default the cached programme data expires
 after a few days to recover space and ensure listings are regenerated.
 An example would be "--cache-expiry='10 days'"
@@ -139,6 +139,10 @@ This option is experimental and may be removed/renamed in the future.
 Purge expired entries from the cache. This is _not_ needed for
 Redis and is inefficient for many other cache backend drivers
 (such as File) and not implemented at all in some other drivers.
+* --cache-root-dir=str
+For File backend, specify the root directory in to which cache
+files are placed. Default is a per-user directory in the temporary
+file storage.
 
 Extra Options
 -------------

@@ -308,6 +308,7 @@ my %catmap_minor = (
                            cache-expiry=s
                            cache-ignore-unchanged-programmes!
                            cache-purge-expired!
+                           cache-root-dir=s
                            benchmark/],
       defaults => { days => 30 },
     }
@@ -1782,7 +1783,7 @@ sub get_cache_object {
     require CHI;
     $cache = CHI->new(driver => $driver,
                       namespace => get_cache_namespace,
-                      root_dir => catdir(tmpdir(), "tv_grab_az.chi-driver-file.$<"), # For CHI::Driver::File ensure we have one per uid
+                      root_dir => cache_get_root_dir(),
                       # We want the backend caching server to
                       # expire data even if we are not run.
                       expires_on_backend => 1,
@@ -1804,7 +1805,7 @@ sub get_cache_object_for_programme_details {
     require CHI;
     $cache = CHI->new(driver => get_option('cache-driver'),
                       namespace => "pd." . get_cache_namespace(),
-                      root_dir => catdir(tmpdir(), "tv_grab_az.chi-driver-file.$<"), # For CHI::Driver::File ensure we have one per uid
+                      root_dir => cache_get_root_dir(),
                       expires_on_backend => 1,
                       # We use an l1 cache since programme details are often repeated.
                       # For example "Night News" will be on every day, and shows are
@@ -1818,6 +1819,12 @@ sub is_cache_enabled {
     # If we have a driver then we are caching.
     state $is_enabled = get_option('cache-driver');
     return $is_enabled;
+}
+
+sub cache_get_root_dir {
+    my $dir = get_option('cache-root-dir');
+    $dir = catdir(tmpdir(), "tv_grab_az.chi-driver-file.$<") unless $dir; # For CHI::Driver::File ensure we have one per uid
+    return $dir;
 }
 
 sub cache_get_expiry {
