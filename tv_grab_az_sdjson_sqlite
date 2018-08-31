@@ -1419,11 +1419,7 @@ my $crewMap =
 
 finalize:
 
-my $use_benchmark = get_option('benchmark') && !$quiet;
-
-if ($use_benchmark) {
-    require Benchmark;
-}
+my $use_benchmark = use_benchmark();
 
 if (!$opt->{'no-prune'}) {
     my ($t_prunestart, $t_pruneend);
@@ -1463,13 +1459,26 @@ sub print_benchmark {
     printf STDERR $text, Benchmark::timestr(Benchmark::timediff($end, $start));
 }
 
-sub output_xml {
-my $use_benchmark = get_option('benchmark') && !$quiet;
-my ($t_start, $t_end, $t_chanstart, $t_chanend, $t_progstart, $t_progend);
-if ($use_benchmark) {
-    require Benchmark;
-    $t_start = Benchmark->new;
+sub use_benchmark {
+    # We have a separate "is_checked flag to avoid repeated calls to
+    # "require" after we have checked the config the first time.
+    state $is_checked;
+    state $enabled_flag;
+    return $enabled_flag if $is_checked;
+
+    $enabled_flag = !$quiet && get_option('benchmark');
+    $is_checked = 1;
+    if ($enabled_flag) {
+        require Benchmark;
+    }
+    return $enabled_flag;
 }
+
+sub output_xml {
+my $use_benchmark = use_benchmark();
+
+my ($t_start, $t_end, $t_chanstart, $t_chanend, $t_progstart, $t_progend);
+$t_start = Benchmark->new if $use_benchmark;
 
 my $w = XML::Writer->new( 'ENCODING' => 'UTF-8',
                           'DATA_MODE' => 1,
