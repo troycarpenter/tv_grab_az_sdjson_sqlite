@@ -3365,7 +3365,7 @@ sub listChannels
 sub sql_generate_lineup_query {
     my ($lineupRef) = @_;
     $lineupRef = $conf->{lineup} unless $lineupRef;
-    die "We do not have any lineups" unless scalar @$lineupRef;
+    Carp::confess "We do not have any lineups" unless $lineupRef && scalar @$lineupRef;
     my @sql;
     my @bind;
     for my $lineup (@$lineupRef) {
@@ -3662,13 +3662,25 @@ sub getLineup
       }
 
     lineupFetchAndValidate($conf);
+
+    my $w = XML::Writer->new( 'ENCODING' => 'UTF-8', 'DATA_MODE' => 1, 'DATA_INDENT' => 1, OUTPUT => 'self' );
+    $w->xmlDecl('UTF-8');
+    $w->comment('Note: list-lineups and get-lineup is still unofficial in XMLTV, and the format and content of this xml is liable to change.');
+    $w->comment($SD_COMMENT);
+    $w->startTag('xmltv-lineups',
+                 'modified'              => strftime("%FT%T %z", localtime),
+                 'generator-info-name'   => $SCRIPT_NAME,
+                 'generator-info-url'    => $SCRIPT_URL,
+                 'source-info-name'      => $SD_DESC,
+                 'source-info-url'       => $SD_SITEURL );
+
     #
     # Collect some lineup information
     #
 
-    my ($lineupsql, @bind) = sql_generate_lineup_query();
-
-    my $sql = "select lineup, name, transport, location, details from lineups where $lineupsql";
+  # Need to output one xmltv lineup section per lineup.
+  for my $lineup (@{$conf->{lineup}}) {
+    my $sql = "select lineup, name, transport, location, details from lineups where lineup = ?";
 
     my $sth = $DBH->prepare_cached($sql);
     if (!defined($sth))
@@ -3677,7 +3689,7 @@ sub getLineup
         exit(1);
       }
 
-    $sth->execute(@bind);
+    $sth->execute($lineup);
 
     if ($sth->err())
       {
@@ -3695,16 +3707,6 @@ sub getLineup
 
     $sth->finish();
 
-    my $w = XML::Writer->new( 'ENCODING' => 'UTF-8', 'DATA_MODE' => 1, 'DATA_INDENT' => 1, OUTPUT => 'self' );
-    $w->xmlDecl('UTF-8');
-    $w->comment('Note: list-lineups and get-lineup is still unofficial in XMLTV, and the format and content of this xml is liable to change.');
-    $w->comment($SD_COMMENT);
-    $w->startTag('xmltv-lineups',
-                 'modified'              => strftime("%FT%T %z", localtime),
-                 'generator-info-name'   => $SCRIPT_NAME,
-                 'generator-info-url'    => $SCRIPT_URL,
-                 'source-info-name'      => $SD_DESC,
-                 'source-info-url'       => $SD_SITEURL );
 
       my $id = $l->[0];
       my $lineupDesc = "$l->[1] $l->[2] $l->[3]";
@@ -3727,7 +3729,7 @@ sub getLineup
               exit(1);
             }
 
-          $sth->bind_param( 1, $conf->{'lineup'}->[0], SQL_VARCHAR );
+          $sth->bind_param( 1, $lineup, SQL_VARCHAR );
 
           $sth->execute();
 
@@ -3920,8 +3922,9 @@ sub getLineup
 
               $w->endTag('lineup-entry');
             }
-
       $w->endTag('xmltv-lineup');
+    }                        # Each lineup in config file.
+
     $w->endTag('xmltv-lineups');
     $w->end();
 
