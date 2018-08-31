@@ -129,7 +129,7 @@ use Data::Dumper;
 my $RFC2838_COMPLIANT          = 1;            # RFC2838 compliant station ids, which makes XMLTV
                                                # validate even though the docs say "SHOULD" not "MUST"
 
-my $SCRIPT_VERSION             = '$Id: tv_grab_az_sdjson_sqlite,v 1.42 3976d0 2018/08/31 01:19:00 gtb Exp ed $';
+my $SCRIPT_VERSION             = '$Id: tv_grab_az_sdjson_sqlite,v 1.43 3976d0 2018/08/31 01:19:00 gtb Exp ed $';
 my $SCRIPT_URL                 = 'https://github.com/azlm8t/tv_grab_zz_sdjson_sqlite';
 my $SCRIPT_NAME                = basename("$0");
 my $SCRIPT_NAME_DIR            = dirname("$0");
@@ -341,6 +341,7 @@ if ($opt->{'manage-lineups'})
 # support
 #
 configValidate($conf, $opt);
+my $use_benchmark = use_benchmark();
 
 if ($opt->{'offset'} < 0)
   {
@@ -450,7 +451,6 @@ print (STDERR "Downloading data from Schedules Direct\n") if (!$quiet);
 # list-lineups.
 my $fetchLineupRequired = lineupFetchAndValidate($conf);
 
-my $use_benchmark = use_benchmark();
 my $t_downloadstart = Benchmark->new if $use_benchmark;
 # We do this sequentially for the moment since we are
 # checking for lineups that are out of date or never
