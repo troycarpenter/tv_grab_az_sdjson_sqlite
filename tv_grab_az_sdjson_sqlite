@@ -719,7 +719,13 @@ for (my $retry = 0; $retry < 7; $retry++)
         print (STDERR "Unexpected error when preparing statement ($sql3): " . $DBH->errstr . "\n");
         exit(1);
       }
-
+    $sql4 = "delete from stations where station = ?";
+    $sth4 = $DBH->prepare_cached($sql4);
+    if (!defined($sth4))
+      {
+        print (STDERR "Unexpected error when preparing statement ($sql4): " . $DBH->errstr . "\n");
+        exit(1);
+      }
     my $schedulesIter;
     $schedulesIter = natatime $SD_SCHEDULE_CHUNK, @{$stationsSchedulesList};
     while(my @chunk = $schedulesIter->())
@@ -770,6 +776,28 @@ for (my $retry = 0; $retry < 7; $retry++)
                 if ($code == 7100)
                   {
                     $downloadQueued = 1;
+                  }
+                  elsif ($code == 7030) {
+                      # SCHEDULE_NOT_IN_LINEUP
+                      #
+                      # We should not normally get these, but we've
+                      # had cases where SD says the station is in your
+                      # configured lineup, then complains that station
+                      # is not in your lineup. Deleting the station
+                      # then causes the next lineup fetch to
+                      # re-populate the station with the same details,
+                      # so is probably pointless, but seems a good idea
+                      # to delete stations we're told don't exist just
+                      # in case.
+                      my $stnid = $sched->{stationID};
+                      if ($stnid) {
+                          print STDERR "......Deleting station $stnid that is no longer in lineup $lineup (SD error 7030)\n" unless $quiet;
+                          $sth4->execute($stnid);
+                          if ($sth4->err) {
+                              print (STDERR "Unexpected error when executing statement ($sql4): " . $sth4->errstr . "\n");
+                              exit(1);
+                          }
+                      }
                   }
                 next;
               }
