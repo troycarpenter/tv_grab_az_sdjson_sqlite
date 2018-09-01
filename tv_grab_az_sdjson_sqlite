@@ -129,7 +129,7 @@ use Data::Dumper;
 my $RFC2838_COMPLIANT          = 1;            # RFC2838 compliant station ids, which makes XMLTV
                                                # validate even though the docs say "SHOULD" not "MUST"
 
-my $SCRIPT_VERSION             = '$Id: tv_grab_az_sdjson_sqlite,v 1.43 3976d0 2018/08/31 01:19:00 gtb Exp ed $';
+my $SCRIPT_VERSION             = '$Id: tv_grab_az_sdjson_sqlite,v 1.44 3976d0 2018/09/01 01:19:00 gtb Exp ed $';
 my $SCRIPT_URL                 = 'https://github.com/azlm8t/tv_grab_zz_sdjson_sqlite';
 my $SCRIPT_NAME                = basename("$0");
 my $SCRIPT_NAME_DIR            = dirname("$0");
@@ -1823,7 +1823,11 @@ sub is_cache_enabled {
 
 sub cache_get_root_dir {
     my $dir = get_option('cache-root-dir');
-    $dir = catdir(tmpdir(), "tv_grab_az.chi-driver-file.$<") unless $dir; # For CHI::Driver::File ensure we have one per uid
+    # Default is a cache directory inside your .xmltv directory.
+    # This is because /tmp can be small on many devices.
+    # For CHI::Driver::File we also ensure we have one per uid
+    # just in case multiple users share the same .xmltv directory.
+    $dir = catdir(File::HomeDir->my_home, '.xmltv', 'cache', "tv_grab_az.chi-driver-file.$<") unless $dir;
     return $dir;
 }
 

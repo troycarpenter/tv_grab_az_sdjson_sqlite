@@ -141,8 +141,8 @@ Redis and is inefficient for many other cache backend drivers
 (such as File) and not implemented at all in some other drivers.
 * --cache-root-dir=str
 For File backend, specify the root directory in to which cache
-files are placed. Default is a per-user directory in the temporary
-file storage.
+files are placed. Default is a per-user sub-directory under the
+user's .xmltv directory.
 
 Extra Options
 -------------
