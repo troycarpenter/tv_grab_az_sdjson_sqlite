@@ -143,6 +143,12 @@ Redis and is inefficient for many other cache backend drivers
 For File backend, specify the root directory in to which cache
 files are placed. Default is a per-user sub-directory under the
 user's .xmltv directory.
+* --cache-compression-threshold=n
+Strings bigger than this threshold in bytes will be compressed
+before storing in the cache. Default is 2048 bytes. Setting it
+too low will waste CPU compressing/uncompressing, setting it
+too high will mean nothing is compressed and the cache will
+be larger.
 
 Extra Options
 -------------
