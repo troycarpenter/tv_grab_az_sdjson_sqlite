@@ -129,7 +129,7 @@ use Data::Dumper;
 my $RFC2838_COMPLIANT          = 1;            # RFC2838 compliant station ids, which makes XMLTV
                                                # validate even though the docs say "SHOULD" not "MUST"
 
-my $SCRIPT_VERSION             = '$Id: tv_grab_az_sdjson_sqlite,v 1.44 3976d0 2018/09/01 01:19:00 gtb Exp ed $';
+my $SCRIPT_VERSION             = '$Id: tv_grab_az_sdjson_sqlite,v 1.45 3976d0 2018/09/01 01:19:00 gtb Exp ed $';
 my $SCRIPT_URL                 = 'https://github.com/azlm8t/tv_grab_zz_sdjson_sqlite';
 my $SCRIPT_NAME                = basename("$0");
 my $SCRIPT_NAME_DIR            = dirname("$0");
@@ -284,6 +284,8 @@ my %catmap_minor = (
                            artwork-max-width=n
                            channel-regex=s
                            channel-exclude-regex=s
+                           channel-short-days=n
+                           channel-short-days-exclude-regex=s
                            use-category-for-keyword!
                            update-description-with-all!
                            update-description-with-credits!
@@ -1700,9 +1702,11 @@ sub output_program {
                                            on_error => 'croak',
                                                  );
     state $merge_split = $opt->{'merge-split'} // $conf->{'merge-split'};
+    state $channelShortDaysExcludeRegex = get_option('channel-short-days-exclude-regex');
+
     my $stationDetails;
     # Shortcut decode logic (if possible) if user hasn't given regex.
-    $stationDetails = $JSON->decode($r->[8]) if (($channelRegex || $channelExcludeRegex) && defined $r->[8]);
+    $stationDetails = $JSON->decode($r->[8]) if (($channelRegex || $channelExcludeRegex || $channelShortDaysExcludeRegex) && defined $r->[8]);
 
     if ($channelRegex && $stationDetails) {
         return 0 if $stationDetails->{name} !~ $channelRegex;
@@ -1710,6 +1714,12 @@ sub output_program {
 
     if ($channelExcludeRegex && $stationDetails) {
         return 0 if $stationDetails->{name} =~ $channelExcludeRegex;
+    }
+
+    if ($channelShortDaysExcludeRegex && $stationDetails && $stationDetails->{name} !~ $channelShortDaysExcludeRegex) {
+        state $channelShortDays = get_option('channel-short-days') // 3;
+        state $channelShortDaysStartTime = DateTime->now(time_zone => 'UTC')->add(days => $channelShortDays)->strftime("%F %T");
+        return 0 if $r->[1] gt $channelShortDaysStartTime;
     }
 
     # Shortcut logic if we are not merging programmes.

@@ -160,7 +160,15 @@ An example is "--merge-split=5" to remove programmes that are only five minutes 
 Prefer artwork with a width no larger than _n_. If no artwork exists at that size then larger artwork may be used.
 An example is "--artwork-max-width-720".
 * --channel-regex=regex and ---channel-exclude-regex=regex
-When outputting xmltv file, only output details for channels matching/not matching the _regex_. This allows the user to run the grabber multiple times and output extra days for important channels.
+When outputting xmltv file, only output details for channels matching/not matching the _regex_. This allows the user to run the grabber multiple times and output extra days for important channels. See also --channel-short-days-regex.
+* --channel-short-days=n and --channel-short-days-exclude-regex=s
+For channels matching the channel-short-days-exclude-regex, only the full programme guide, for
+other channels, output only the "--channel-short-days" worth of days.
+This allows you to use --days for "good" channels and "--channel-short-days" for channels that are not interesting,
+thus saving memory on PVRs and clients.
+Note that it is an "exclude" regex since it's likely you know the channels that are interesting
+and all the other channels are then marked as boring.
+For example: --channel-short-days=3 --channel-short-days-exclude-regex="BBC|Movie|PBS"
 * --no-download
 Do not download the schedule, use database cache only.
 * --no-prune
@@ -279,32 +287,25 @@ on all the other channels such as shopping.
 
 For mythtv/mythweb, I like to have artwork injected in the description.
 
-I use File caching backend (which stores the cache in /tmp) since I
-have a tmpfs backed by SSD and it seems a bit faster than Redis on my
-system.
-
-I imagine zfs might be a reasonable alternative filesystem for caching
-if "sync=disabled" is set on the volume.
+I use File caching backend since I have a reasonably fast filesystem
+backed by SSD and it seems a bit faster than Redis on my system.
 
 So I have a script that is run via crontab. It is similar to:
 
 ```shell-script
 #! /bin/sh
-CHREGEX="BBC|Movie|Film|Sony"
-COMMONARGS="--config-file sd.conf --merge-split=5 --artwork-max-width=720 --update-description-with-all --update-description-with-artwork --update-previously-shown-with-year --cache-driver=File --cache-ignore-unchanged-programmes --benchmark --cache-ignore-unchanged-programmes"
-tv_grab_az_sdjson_sqlite --no-prune --output out.xml --days 10 --channel-regex="$CHREGEX" $COMMONARGS
-mythfilldatabase --file --xmlfile out.xml --sourceid 1
-```
 
-Then I run it for the other channels and prune the database of expired records:
-```shell-script
-tv_grab_az_sdjson_sqlite --no-download --cache-purge-expired --output out2.xml--days 3 --channel-exclude-regex="$CHREGEX" $COMMONARGS
+# Interesting channels have this text in their name (separated by pipe symbol)
+CHREGEX="BBC|Movie|Film|Sony"
+
+COMMONARGS="--config-file sd.conf --merge-split=5 --artwork-max-width=720 --update-description-with-all --update-description-with-artwork --update-previously-shown-with-year --cache-driver=File --cache-purge-expired --cache-ignore-unchanged-programmes --benchmark --cache-ignore-unchanged-programmes"
+tv_grab_az_sdjson_sqlite --output out.xml --days 10 --channel-short-days=3 --channel-short-days-exclude-regex="$CHREGEX" $COMMONARGS
 mythfilldatabase --file --xmlfile out.xml --sourceid 1
 ```
 
 For tvheadend, I don't use artwork in the descriptions since its grid doesn't handle them very well:
 ```
-tv_grab_az_sdjson_sqlite --cache-purge-expired --output tvh.xml $COMMON_ARGS --no-update-description-with-artwork --cache-namespace-extra=tvh
+tv_grab_az_sdjson_sqlite --output tvh.xml $COMMON_ARGS --no-update-description-with-artwork --cache-namespace-extra=tvh
 nc -w 5 -U /home/hts/.hts/tvheadend/epggrab/xmltv.sock < tvh.xml
 ```
 
