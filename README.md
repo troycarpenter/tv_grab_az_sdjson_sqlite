@@ -106,7 +106,7 @@ With multiple days and hundreds of channels, this can significantly
 reduce overhead. On my test system, it reduced the run time from 134
 seconds to 14 seconds.
 
-To check that redis caching is occurring, you can use "redis-cli stat"
+To check that redis caching is occurring, you can use "redis-cli --stat"
 to monitor keys/memory usage of the redis server. The server
 must have enough space to hold the cached data (maxmemory setting
 in the redis server's redis.conf).
