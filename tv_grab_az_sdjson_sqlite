@@ -1781,16 +1781,20 @@ sub get_cache_namespace {
     state $cache_ns;
     return $cache_ns if $cache_ns;
 
-    # When our script changes, change namespace in case we have fixed
-    # bugs.
-    my $ns = "$SCRIPT_VERSION";
+    # It seemed a good idea to include $SCRIPT_VERSION
+    # in our namespace so when a new release is made we
+    # automatically ignore old data and let the server
+    # purge them automatically, in case we had fixed bugs.
+    # However, with a File backend, it means we leave behind
+    # a whole cache hierarchy for every version that is never
+    # accessed. So, we'll just use one fixed namespace.
+    my $ns = "tv_az";
     # Allow user to specify additional namespaces, for example if
     # script is run with different options for different PVRs.
     my $user_ns = get_option('cache-namespace-extra');
-    $ns .= $user_ns if $user_ns;
+    $ns .= ".$user_ns" if $user_ns;
 
-    # Then shrink it all down.
-    $ns = sha1_hex($ns);
+    # We no longer sha1_hex since the namespace should be short.
 
     # We append EUID to ensure we also get a different cache per user.
     $ns .= ".$>";
