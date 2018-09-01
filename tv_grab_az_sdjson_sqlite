@@ -1885,9 +1885,57 @@ sub cache_get_expiry {
     return $optional_timeout;
 }
 
+# Calculate an expiry for a programme in the cache.  So user may say
+# "expire in 2 weeks", but our programme is on today, so no point
+# leaving it in the cache for a further 2 weeks when it can expire
+# early.
+sub cache_get_maximum_expiry_for_programme {
+    my ($progtime, $expiry) = @_;
+    return $expiry unless $progtime;
+
+    # Parse the time in to an epoch.
+    #
+    # We add on a few hours to ensure we have some lee-way if a
+    # second fetch is done before programme expires.
+    my $progtime_timet = eval { DateTime::Format::SQLite->parse_datetime($progtime)->add(hours=>12)->epoch };
+    # If we failed, then return default expiry.
+    return $expiry unless $progtime_timet;
+
+    my $now = time();
+    # Let's prematurely optimize to avoid constantly parsing $expiry
+    # if the time has not changed.
+    state $prev_now = 0;
+    state $expires_at = 0;
+    state $prev_expiry = $expiry;
+
+    # If our expiry string has changed then our cached values must
+    # also change.
+    $prev_now = 0 if ($expiry ne $prev_expiry);
+
+    if ($now == $prev_now) {
+        # Nothing to do, re-use $expires_at.
+    } elsif ($now == $prev_now + 1) {
+        # If we were one second on then we now expiry is also one second later.
+        # This avoids re-parsing the $expiry.
+        ++$expires_at;
+        $prev_now = $now;
+    } else {
+        # A few seconds later, so recalculate.
+        $expires_at = $now + Time::Duration::Parse::parse_duration($expiry);
+        $prev_now = $now;
+        $prev_expiry = $expiry;
+    }
+
+    if ($expires_at > $progtime_timet) {
+        return $progtime_timet;
+    } else {
+        return $expires_at;
+    }
+}
+
 sub cache_set {
     my ($key, $value_ref, $optional_timeout) = @_;
-    $optional_timeout = cache_get_expiry($optional_timeout);
+    $optional_timeout = cache_get_expiry($optional_timeout) unless $optional_timeout;
     print STDERR "Setting cache $key for $optional_timeout\n" if $debug;
     get_cache_object->set($key, $value_ref, $optional_timeout);
     if ($debug) {
@@ -2539,8 +2587,12 @@ sub write_programme {
                                      );
     my $ret = write_programme_i($cache_prog, $r2);
     my $out = $cache_prog->to_string();
-    $w->raw($out) if $out;
-    cache_set($key, \$out) if $out;
+    if ($out) {
+        $w->raw($out);
+        my $stop = $r2->{db}->[1]; # Scheduled start time.
+        state $expiry = cache_get_expiry();
+        cache_set($key, \$out, cache_get_maximum_expiry_for_programme($stop, $expiry));
+    }
     return $ret;
 }
 
@@ -6778,6 +6830,7 @@ use LWP::UserAgent::Determined;
 use LWP::Simple;
 use LWP::Protocol::https;
 use LWP::ConnCache;
+use Time::Duration::Parse;
 use Time::HiRes qw( time );
 use Data::Dumper;
 
