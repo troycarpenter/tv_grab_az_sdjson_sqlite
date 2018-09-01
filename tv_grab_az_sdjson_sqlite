@@ -1576,8 +1576,8 @@ left join programs as supplemental on programs.program_supplemental = supplement
 
 where
 schedules.station in (select distinct stations.station from stations as stations where stations.station in ( select distinct channels.station from channels as channels where $lineupsql and channels.selected = 1))
-AND schedules.day >= ?
-and schedules.day < ?
+AND schedules.starttime >= ?
+and schedules.starttime < ?
 
 order by schedules.station, schedules.starttime";
 
@@ -1591,11 +1591,24 @@ order by schedules.station, schedules.starttime";
   #
   # Determine our start and end days
   #
-  my $startDay = DateTime->now(time_zone => 'UTC')->add(days => $opt->{'offset'});
+  # Previously we'd round to nearest day (ignore time). But that means
+  # if you run the grabber in the evening, you get the entire of
+  # today's listings (including morning and afternoon) which is not
+  # useful.
+  #
+  # So, we start from "now", but we subtract a few hours since
+  # otherwise if a programme is half way through then its starttime
+  # would be in the past so the programme would not be included.
+  #
+  # Of course, the opposite problem is that now if you ran at
+  # midnight, you now get a few programmes from yesterday...
+  # We could filter on "endtime" but that isn't stored in a DB
+  # column and the overhead of calculating it does not seem
+  # worth it.
+  my $startDay = DateTime->now(time_zone => 'UTC')->add(days => $opt->{'offset'})->subtract(hours => 4);
   my $endDay = DateTime->now(time_zone => 'UTC')->add(days => $opt->{'offset'})->add(days => $opt->{'days'});
-
-  push @bind, $startDay;        # is an SQL_DATE
-  push @bind, $endDay;          # is an SQL_DATE
+  push @bind, DateTime::Format::SQLite->format_datetime($startDay, SQL_DATETIME);
+  push @bind, DateTime::Format::SQLite->format_datetime($endDay, SQL_DATETIME);
 
   $sth->execute(@bind);
 
