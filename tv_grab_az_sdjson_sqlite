@@ -129,7 +129,8 @@ use Data::Dumper;
 my $RFC2838_COMPLIANT          = 1;            # RFC2838 compliant station ids, which makes XMLTV
                                                # validate even though the docs say "SHOULD" not "MUST"
 
-my $SCRIPT_VERSION             = '$Id: tv_grab_az_sdjson_sqlite,v 1.46 3976d0 2018/09/02 01:19:00 gtb Exp ed $';
+# Has to be a "CVS" Id string for XMLTV::Options.
+my $SCRIPT_VERSION             = '$Id: tv_grab_az_sdjson_sqlite,v 1.47 3976d0 2018/09/02 01:19:00 gtb Exp ed $';
 my $SCRIPT_URL                 = 'https://github.com/azlm8t/tv_grab_zz_sdjson_sqlite';
 my $SCRIPT_NAME                = basename("$0");
 my $SCRIPT_NAME_DIR            = dirname("$0");
@@ -3478,7 +3479,9 @@ sub lineupFetchAndValidate {
 #
 sub listChannels
   {
-    my ($conf, $opt, undef) = @_;
+    my ($conf_xmltv, $opt_xmltv, undef) = @_;
+    $conf = $conf_xmltv;
+    $opt = $opt_xmltv;
 
     my $fetchLineupRequired;
 
@@ -3706,8 +3709,9 @@ sub channelWriter
 #
 sub listLineups
   {
-    my ($opt, undef) = @_;
-    my $conf = LoadConfig($opt->{'config-file'});
+    my ($opt_xmltv, undef) = @_;
+    $opt = $opt_xmltv;
+    $conf = LoadConfig($opt->{'config-file'});
 
     configValidate($conf, $opt);
 
@@ -3808,8 +3812,10 @@ sub listLineups
 #
 sub getLineup
   {
-    my ($conf, $opt, undef) = @_;
+    my ($conf_xmltv, $opt_xmltv, undef) = @_;
 
+    $conf = $conf_xmltv;
+    $opt = $opt_xmltv;
     configValidate($conf, $opt);
 
     $debug = $opt->{'debug'};
