@@ -129,7 +129,7 @@ use Data::Dumper;
 my $RFC2838_COMPLIANT          = 1;            # RFC2838 compliant station ids, which makes XMLTV
                                                # validate even though the docs say "SHOULD" not "MUST"
 
-my $SCRIPT_VERSION             = '$Id: tv_grab_az_sdjson_sqlite,v 1.45 3976d0 2018/09/01 01:19:00 gtb Exp ed $';
+my $SCRIPT_VERSION             = '$Id: tv_grab_az_sdjson_sqlite,v 1.46 3976d0 2018/09/02 01:19:00 gtb Exp ed $';
 my $SCRIPT_URL                 = 'https://github.com/azlm8t/tv_grab_zz_sdjson_sqlite';
 my $SCRIPT_NAME                = basename("$0");
 my $SCRIPT_NAME_DIR            = dirname("$0");
@@ -310,6 +310,7 @@ my %catmap_minor = (
                            cache-expiry=s
                            cache-ignore-unchanged-programmes!
                            cache-purge-expired!
+                           cache-force-clear!
                            cache-root-dir=s
                            cache-compression-threshold=n
                            benchmark/],
@@ -405,6 +406,8 @@ if ($opt->{'force-download'})
     print (STDERR "   clearing existing database to force full download\n") if (!$quiet);
     DB_clean();
   }
+
+check_cache_clear();
 
 #
 # If we are not downloading data, we need to verify
@@ -1477,6 +1480,36 @@ if (get_option('cache-purge-expired') && is_cache_enabled()) {
     print_benchmark($t_purgestart, $t_purgeend, "Purging took %s\n") if !$quiet && $use_benchmark;
 }
 exit(0);
+
+
+sub cache_clear {
+    my ($t_clearstart);
+    $t_clearstart = Benchmark->new if $use_benchmark;
+    eval { get_cache_object()->clear() };
+    if (my $err = @_) {
+        print STDERR "Failed to clear cache: $err\n";
+    }
+    # Need separate clear for this since it is a different namespace.
+    eval { get_cache_object_for_programme_details()->clear() };
+    if (my $err = @_) {
+        print STDERR "Failed to clear cache: $err\n";
+    }
+    if ($use_benchmark) {
+        my $t_clearend = Benchmark->new;
+        print_benchmark($t_clearstart, $t_clearend, "Clearing took %s\n") unless $quiet;
+    }
+}
+
+# Check if user wants a cache clear, and clear it if necessary.
+sub check_cache_clear {
+    return unless get_option('cache-force-clear');
+    if (!is_cache_enabled()) {
+        print STDERR "   cache clear requested, but no cache is enabled.\n" unless $quiet;
+        return;
+    }
+    print STDERR "   clearing cache\n" unless $quiet;
+    cache_clear();
+}
 
 sub print_benchmark {
     my ($start, $end, $text) = @_;
@@ -3467,6 +3500,7 @@ sub listChannels
         DB_clean();
       }
 
+    check_cache_clear();
     lineupFetchAndValidate($conf);
 
     my $w = XML::Writer->new( 'ENCODING' => 'UTF-8',
@@ -3693,6 +3727,7 @@ sub listLineups
         DB_clean();
       }
 
+    check_cache_clear();
     print (STDERR "Obtaining authentication token for Schedules Direct\n") if ($download && !$quiet);
     SD_login() if ($download);
 
@@ -3793,6 +3828,7 @@ sub getLineup
         DB_clean();
       }
 
+    check_cache_clear();
     lineupFetchAndValidate($conf);
 
     my $w = XML::Writer->new( 'ENCODING' => 'UTF-8', 'DATA_MODE' => 1, 'DATA_INDENT' => 1, OUTPUT => 'self' );

@@ -139,6 +139,9 @@ This option is experimental and may be removed/renamed in the future.
 Purge expired entries from the cache. This is _not_ needed for
 Redis and is inefficient for many other cache backend drivers
 (such as File) and not implemented at all in some other drivers.
+* --cache-force-clear
+Force the cache to be cleared of entries. Useful if there are
+problems. See also --force-download.
 * --cache-root-dir=str
 For File backend, specify the root directory in to which cache
 files are placed. Default is a per-user sub-directory under the
