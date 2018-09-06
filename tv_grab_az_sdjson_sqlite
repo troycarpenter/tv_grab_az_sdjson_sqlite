@@ -130,7 +130,7 @@ my $RFC2838_COMPLIANT          = 1;            # RFC2838 compliant station ids, 
                                                # validate even though the docs say "SHOULD" not "MUST"
 
 # Has to be a "CVS" Id string for XMLTV::Options.
-my $SCRIPT_VERSION             = '$Id: tv_grab_az_sdjson_sqlite,v 1.47 3976d0 2018/09/02 01:19:00 gtb Exp ed $';
+my $SCRIPT_VERSION             = '$Id: tv_grab_az_sdjson_sqlite,v 1.48 3976d0 2018/09/02 01:19:00 gtb Exp ed $';
 my $SCRIPT_URL                 = 'https://github.com/azlm8t/tv_grab_zz_sdjson_sqlite';
 my $SCRIPT_NAME                = basename("$0");
 my $SCRIPT_NAME_DIR            = dirname("$0");
@@ -1577,7 +1577,7 @@ $w->startTag('tv',
       # Unfortunately the "compute" tracks number computed not number from cache,
       # so calculate number from cache here.
       my $num_prog_details_from_cache = $num_prog_details_total - $num_prog_details_not_from_cache;
-      printf (STDERR "   %d of %d programs details retrieved from cache (%0.2f%%)\n", $num_prog_details_from_cache, $num_prog_details_total, $num_prog_details_from_cache / $num_prog_details_total * 100) if (!$quiet && $num_prog_details_from_cache > 0);
+      printf (STDERR "   %d of %d program details retrieved from cache (%0.2f%%)\n", $num_prog_details_from_cache, $num_prog_details_total, $num_prog_details_from_cache / $num_prog_details_total * 100) if (!$quiet && $num_prog_details_from_cache > 0);
   }
   if ($use_benchmark) {
       printf (STDERR "   xmltv generation took %s\n", Benchmark::timestr(Benchmark::timediff($t_end, $t_start))) if (!$quiet);
@@ -2565,6 +2565,7 @@ sub write_programme_i {
 
     ++$num_prog_details_total;
     if (!is_cache_enabled()) {
+        ++$num_prog_details_not_from_cache;
         write_programme_details($w, $r2);
     } else {
         my $scheduleDetails = $r2->{scheduleDetails};
