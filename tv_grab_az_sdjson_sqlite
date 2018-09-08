@@ -2603,6 +2603,8 @@ sub write_programme_i {
 
     }
     $w->endTag('programme');
+    # Programme processed.
+    return 1;
 }
 
 sub write_programme {
