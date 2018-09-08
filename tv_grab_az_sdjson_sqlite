@@ -1617,7 +1617,9 @@ sub programWriter {
   #
 
   my ($lineupsql, @bind) = sql_generate_lineup_query();
-  my $sql = "select schedules.station, schedules.starttime, schedules.duration, schedules.program, schedules.details, programs.details, strftime('%Y%m%d%H%M%S', schedules.starttime), strftime('%Y%m%d%H%M%S', datetime(schedules.starttime, '+' || schedules.duration || ' seconds')), stations.details, supplemental.details, NULL, NULL, programs.hash as prog_hash, supplemental.hash as sup_hash, programs.program_supplemental
+  # If we have caching then we avoid pulling big columns from the DB unless needed.
+  my $progDetails = is_cache_enabled() ? "NULL" : "programs.details";
+  my $sql = "select schedules.station, schedules.starttime, schedules.duration, schedules.program, schedules.details, $progDetails, strftime('%Y%m%d%H%M%S', schedules.starttime), strftime('%Y%m%d%H%M%S', datetime(schedules.starttime, '+' || schedules.duration || ' seconds')), stations.details, supplemental.details, NULL, NULL, programs.hash as prog_hash, supplemental.hash as sup_hash, programs.program_supplemental
 
 from
 schedules as schedules left join programs as programs on programs.program = schedules.program
@@ -2140,15 +2142,8 @@ sub get_artwork_image {
     return undef;
 }
 
-sub get_json_artwork_for_progid {
-    my ($progid) = @_;
-    # Sqlite allows us to execute a statement even during a fetch.
-    # "Portable applications should not assume [this]" (DBI).
-    # So, to be portable, we'll open a second DB connection here.
-    state $db = DB_open_local(noupgrade => 1, # Don't want to go through upgrading db since it's already done.
-                              AutoCommit => 1, RaiseError => 1, PrintError => 1);
-    state $sql = "select details from artwork where program = ?";
-    state $sth = $db->prepare_cached($sql);
+sub get_json_common_details_for_progid {
+    my ($sth, $progid) = @_;
     $sth->bind_param(1, $progid);
     $sth->execute();
     $sth->bind_col( 1, undef, SQL_VARCHAR );
@@ -2158,6 +2153,26 @@ sub get_json_artwork_for_progid {
     }
     return undef;
 }
+
+sub get_json_artwork_for_progid {
+    # Sqlite allows us to execute a statement even during a fetch.
+    # "Portable applications should not assume [this]" (DBI).
+    # So, to be portable, we'll open a second DB connection here.
+    state $db = DB_open_local(noupgrade => 1, # Don't want to go through upgrading db since it's already done.
+                              AutoCommit => 1, RaiseError => 1, PrintError => 1);
+    state $sql = "select details from artwork where program = ?";
+    state $sth = $db->prepare_cached($sql);
+    return get_json_common_details_for_progid($sth, shift);
+}
+
+sub get_json_program_details_for_progid {
+    state $db = DB_open_local(noupgrade => 1, # Don't want to go through upgrading db since it's already done.
+                              AutoCommit => 1, RaiseError => 1, PrintError => 1);
+    state $sql = "select details from programs where program = ?";
+    state $sth = $db->prepare_cached($sql);
+    return get_json_common_details_for_progid($sth, shift);
+}
+
 
 # Fetch and JSON decode artwork for the progid.
 sub get_decoded_artwork_for_progid {
@@ -2661,6 +2676,13 @@ sub write_programme_details {
     # These may already be decoded earlier and passed to us, in which
     # case use them, otherwise decode from DB details.
     my $programDetails = $r2->{programDetails};
+    if (!$programDetails && !$r->[5]) {
+        # If we were caching, we avoided fetching the large program
+        # details from the DB. So we now need to fetch them here.
+        my $prog_details = get_json_program_details_for_progid($r->[3]);
+        $r->[5] = $prog_details;
+    }
+
     if (!$programDetails && $r->[5]) {
         $programDetails = $r2->{programDetails} = $JSON->decode($r->[5]);
     }
