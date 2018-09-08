@@ -243,13 +243,14 @@ Extra Packages Required
 
 A list of extra (potentially non-standard) packages you may need to install is below:
 
-- DateTime::Format::SQLite
+- DateTime::Format::SQLite (libdatetime-format-sqlite-perl)
 - DBD::SQLite
 - File::Homedir
 - JSON
-- JSON::XS
-- LWP::Protocols::HTTPS
+- JSON::XS (libjson-xs-perl)
+- LWP::Protocols::https (liblwp-protocol-https-perl)
 - LWP::UserAgent::Determined
+- URO::Escape::XS (liburi-escape-xs-perl)
 - XMLTV
 
 For local (advanced) caching you also need:
@@ -258,6 +259,12 @@ For local (advanced) caching you also need:
 - A redis-server running on the local machine (redis-server)
 
 The other modules used are typically already installed as part of xmltv.
+
+Different distributions may have different dependencies but this will install dependencies
+on some distributions:
+```shell-script
+sudo apt install xmltv libdatetime-format-sqlite-perl libjson-xs-perl liblwp-protocol-https-perl liburi-escape-xs-perl libchi-perl libchi-driver-redis-perl
+```
 
 Miscellaneous Information
 -------------------------
