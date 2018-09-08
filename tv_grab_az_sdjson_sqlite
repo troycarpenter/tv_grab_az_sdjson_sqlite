@@ -2595,13 +2595,7 @@ sub write_programme_i {
         my $key = cache_generate_key_for_programme_details($r2);
         my $out = get_cache_object_for_programme_details()->
           compute($key, cache_get_expiry(), sub {
-                      my $cache_prog =
-                        XML::Writer->new(OUTPUT => 'self',
-                                         ENCODING => 'UTF-8',
-                                         DATA_MODE => 1,
-                                         DATA_INDENT => 1,
-                                         UNSAFE => (!$debug)
-                                        );
+                      my $cache_prog = LightXMLWriter->new;
                       write_programme_details($cache_prog, $r2);
                       my $out = $cache_prog->to_string();
                       ++$num_prog_details_not_from_cache;
@@ -2652,12 +2646,7 @@ sub write_programme {
         return 1;
     }
 
-    my $cache_prog = XML::Writer->new(OUTPUT => 'self',
-                                      ENCODING => 'UTF-8',
-                                      DATA_MODE => 1,
-                                      DATA_INDENT => 1,
-                                      UNSAFE => (!$debug)
-                                     );
+    my $cache_prog = LightXMLWriter->new;
     my $ret = write_programme_i($cache_prog, $r2);
     my $out = $cache_prog->to_string();
     if ($out) {
@@ -2716,11 +2705,7 @@ sub write_programme_details {
     $w->dataElement('title', $title) if ($title);
     my $sub_title = get_sub_title($r2);
     $w->dataElement('sub-title', $sub_title) if $sub_title;
-    my $w2 = XML::Writer->new(OUTPUT => 'self',
-                              ENCODING => 'UTF-8',
-                              DATA_MODE => 1,
-                              DATA_INDENT => 1,
-                              UNSAFE => (!$debug));
+    my $w2 = LightXMLWriter->new;
         # XMLTV roles for this program
         my $roles =
           {
@@ -6864,6 +6849,93 @@ L<xmltv(5)>.
 
 
 ########################################################################
+
+# The XML::Writer is very heavy-weight and slow.
+# So we implement a very lightweight version that only
+# writes to internal string and contains a subset of
+# functions.
+package LightXMLWriter;
+
+sub new {
+    my ($class, %args) = @_;
+    my $self = {};
+    $self->{str} = '';
+    return bless $self, $class
+}
+
+sub to_string {
+    my ($self) = @_;
+    return $self->{str};
+}
+
+sub raw {
+    my ($self, $str) = @_;
+    $self->{str} .= $str;
+    return $self;
+}
+
+sub _escape_string {
+    my ($str) = @_;
+    if ($str =~ /[&<>"]/) {
+        $str =~ s/&/\&amp;/g;
+        $str =~ s/</\&lt;/g;
+        $str =~ s/>/\&gt;/g;
+        $str =~ s/"/\&quot;/g;
+    }
+    return $str;
+}
+
+sub comment {
+    my ($self, $str) = @_;
+    $self->{str} .= "<comment>" . _escape_string($str) . "</comment>";
+    return $self;
+}
+
+sub startTag {
+    my ($self, $tag, %tags) = @_;
+    $self->{str} .= "<$tag ";
+    $self->_add_attribs(%tags);
+    $self->{str} .= '>';
+    return $self;
+}
+
+sub endTag {
+    my ($self, $tag) = @_;
+    $self->{str} .= "</$tag>\n";
+    return $self;
+}
+
+sub _add_attribs {
+    my ($self, %tags) = @_;
+    for my $attr (sort keys %tags) {
+        my $value = _escape_string($tags{$attr});
+        $self->{str} .= qq/$attr = "$value" /;
+    }
+    return $self;
+}
+
+
+sub emptyTag {
+    my ($self, $tag, %tags) = @_;
+    $self->{str} .= "<$tag ";
+    $self->_add_attribs(%tags);
+    $self->{str} .= " />";
+    return $self;
+}
+
+sub characters {
+    my ($self, $data) = @_;
+    $self->{str} .= _escape_string($data);
+    return $self;
+}
+
+sub dataElement {
+    my ($self, $tag, $data, %tags) =@_;
+    $self->startTag($tag, %tags)->characters($data)->endTag($tag);
+    return $self;
+}
+
+sub end {}
 
 package SchedulesDirect v20141201.0.0;
 
