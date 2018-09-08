@@ -2027,10 +2027,10 @@ sub cache_generate_key {
     my $start = $r->[6]; # For "premiere" instead of using schedDetails which is long.
     my $stop = $r->[7];
     # my $stationDetails = $r->[8] // "No station details";
-    my $artDetails = $r->[10] // "No art details";
-    my $supArtDetails = $r->[11] // "No sup art";
     my $programHash = $r->[12] // "No prog hash";
     my $supplementalHash = $r->[13] // "No sup hash";
+    # Ideally we would have artHash and supArtHash here, but we currently
+    # do not fetch artwork details unless we have to.
     return sha1_hex( join ":",
                      $sID,
                      $start,
@@ -2039,14 +2039,6 @@ sub cache_generate_key {
                      $pID,
                      $programHash,
                      $supplementalHash,
-                     # Only substr since artwork details can be around
-                     # 4k and takes time to sha1. We skip a bit in the
-                     # string since the start is always JSON standard
-                     # text.
-                     # Have to do the checks since we run with extra checking
-                     # which throws error if substr is out of range.
-                     $artDetails && length($artDetails) > 50 ? substr($artDetails, 10, 20) : $artDetails,
-                     $supArtDetails && length($supArtDetails) > 50 ? substr($supArtDetails, 10, 20) : $supArtDetails,
                    );
 }
 
