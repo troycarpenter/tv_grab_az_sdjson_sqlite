@@ -418,7 +418,7 @@ check_cache_clear();
 #
 if (!$download)
   {
-    lineupValidate($_) for @{$conf->{lineup}};
+    lineupValidate($conf->{'lineup'});
     goto skipDownload;
   }
 
@@ -459,7 +459,6 @@ print (STDERR "Downloading data from Schedules Direct\n") if (!$quiet);
 # based on $download to be compatible with list-channels and
 # list-lineups.
 my $fetchLineupRequired = lineupFetchAndValidate($conf);
-
 my $t_downloadstart = Benchmark->new if $use_benchmark;
 # We do this sequentially for the moment since we are
 # checking for lineups that are out of date or never
@@ -4695,21 +4694,24 @@ sub SD_downloadLineupMaps
 #
 # lineupValidate
 #
-# Convenience routine to validate that the configured
-# lineup is still in our Schedules Direct lineup
+# Convenience routine to validate that the specified
+# lineup(s) are still in our Schedules Direct lineup
 #
 # If the lineup is not valid we write a message and exit
 #
 #   Input:
-#              lineup      - Lineup to validate
+#              lineup(s)    - Lineup(s) to validate
 #   Output:
 #              <none>
 #
 sub lineupValidate
   {
-    my ($lineup, undef) = @_;
+    my ($lineups, undef) = @_;
+    my @lineups = ref($lineups) eq 'ARRAY' ? @{$lineups} : ($lineups);
 
-    my $sql = "select lineup, name, transport, location, details from lineups where lineup = ?";
+    my $fatal = 0;
+
+    my $sql = 'select lineup, name, transport, location, details from lineups where lineup = ?';
 
     my $sth = $DBH->prepare_cached($sql);
     if (!defined($sth))
@@ -4718,45 +4720,53 @@ sub lineupValidate
         exit(1);
       }
 
-    $sth->bind_param( 1, $lineup, SQL_VARCHAR );
-
-    $sth->execute();
-
-    if ($sth->err())
+    foreach my $lineup (@lineups)
       {
-        print (STDERR "Unexpected error when executing statement ($sql): " . $sth->errstr . "\n");
-        exit(1)
+        $sth->bind_param( 1, $lineup, SQL_VARCHAR );
+
+        $sth->execute();
+
+        if ($sth->err())
+          {
+            print (STDERR "Unexpected error when executing statement ($sql): " . $sth->errstr . "\n");
+            exit(1)
+           }
+
+        $sth->bind_col( 1, undef, SQL_VARCHAR );
+        $sth->bind_col( 2, undef, SQL_VARCHAR );
+        $sth->bind_col( 3, undef, SQL_VARCHAR );
+        $sth->bind_col( 4, undef, SQL_VARCHAR );
+        $sth->bind_col( 5, undef, SQL_VARCHAR );
+
+        my $llu = $sth->fetchrow_arrayref();
+
+        $sth->finish();
+
+        if (!defined($llu))
+          {
+            print (STDERR "Lineup $lineup is no longer configured in your account at Schedules Direct.\n");
+            print (STDERR "Please run $SCRIPT_NAME --manage-lineups to manage your Schedules Direct lineups,\n");
+            print (STDERR "and/or $SCRIPT_NAME --configure to change the configured lineups.\n");
+            $fatal = 1;
+          }
+        else
+          {
+            my $lineupDeleted = $JSON->utf8->decode($llu->[4])->{'isDeleted'};
+
+            if (defined($lineupDeleted) && $lineupDeleted)
+              {
+                print (STDERR "Lineup $lineup has been deleted at Schedules Direct.\n");
+                print (STDERR "Please run $SCRIPT_NAME --manage-lineups to manage your Schedules Direct lineups,\n");
+                print (STDERR "and/or $SCRIPT_NAME --configure to change the configured lineups.\n");
+                $fatal = 1;
+              }
+          }
       }
 
-    $sth->bind_col( 1, undef, SQL_VARCHAR );
-    $sth->bind_col( 2, undef, SQL_VARCHAR );
-    $sth->bind_col( 3, undef, SQL_VARCHAR );
-    $sth->bind_col( 4, undef, SQL_VARCHAR );
-    $sth->bind_col( 5, undef, SQL_VARCHAR );
-
-    my $llu = $sth->fetchrow_arrayref();
-
-    $sth->finish();
-
-    if (!defined($llu))
+    if ($fatal)
       {
-        print (STDERR "Lineup $lineup is no longer configured at Schedules Direct\n");
-        print (STDERR "Please run $SCRIPT_NAME --manage-lineups to manage your Schedules Direct lineups\n");
-        print (STDERR "and/or $SCRIPT_NAME --configure to change the configured lineup\n");
         exit(1);
       }
-
-    my $lineupDeleted = $JSON->utf8->decode($llu->[4])->{'isDeleted'};
-
-    if (defined($lineupDeleted) && $lineupDeleted)
-      {
-        print (STDERR "Lineup $lineup has been deleted at Schedules Direct\n");
-        print (STDERR "Please run $SCRIPT_NAME --manage-lineups to manage your Schedules Direct lineups\n");
-        print (STDERR "and/or $SCRIPT_NAME --configure to change the configured lineup\n");
-        exit(1);
-      }
-
-    return;
   }
 
 #
