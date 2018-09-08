@@ -104,6 +104,7 @@ use XMLTV::Ask;
 use XML::Writer;
 use Encode qw/decode encode/;
 use JSON;
+use Digest::MD5 qw(md5_hex);
 use Digest::SHA qw(sha1 sha1_hex sha1_base64);
 use File::Basename;
 use File::Which;
@@ -1251,9 +1252,6 @@ for (my $retry = 0; $retry < 7; $retry++)
           {
             my $pID = $artwork->{'programID'};
             next if (!defined($pID));
-            # Artwork currently has no hash, but we persist one for consistency.
-            # In the future perhaps we persist the hash from the program.
-            my $hash = $artwork->{'md5'} || 0;
             my $code = $artwork->{'code'} || 0;
             if ($code != 0)
               {
@@ -1272,6 +1270,9 @@ for (my $retry = 0; $retry < 7; $retry++)
                 next;
               }
             my $details = $JSON->utf8->encode($artwork);
+            # Artwork currently has no hash, but we persist one for consistency.
+            # In the future perhaps we persist the hash from the program.
+            my $hash = $artwork->{'md5'} || md5_hex($details);
             $sth4->bind_param( 1, $pID, SQL_VARCHAR );
             $sth4->bind_param( 2, $hash, SQL_VARCHAR );
             $sth4->bind_param( 3, $details, SQL_VARCHAR );
