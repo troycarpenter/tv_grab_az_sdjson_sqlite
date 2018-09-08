@@ -1584,7 +1584,7 @@ $w->startTag('tv',
   }
 
   printf (STDERR "   $num_prog_from_cache programs retrieved from cache (%0.2f%%)\n", $num_prog_from_cache / $programsWritten * 100) if (!$quiet && $num_prog_from_cache);
-  printf (STDERR "   $num_prog_from_cache programs not output saving approx %s\n", human_number($len_prog_not_printed)) if $len_prog_not_printed;
+  printf (STDERR "   $num_prog_from_cache programs not output saving approx %s\n", human_number($len_prog_not_printed)) if !$quiet && $len_prog_not_printed;
   {
       # Unfortunately the "compute" tracks number computed not number from cache,
       # so calculate number from cache here.
