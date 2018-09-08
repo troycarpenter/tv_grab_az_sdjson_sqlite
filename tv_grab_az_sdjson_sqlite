@@ -172,6 +172,7 @@ my $download = 1;
 my $num_prog_from_cache = 0;
 my $num_prog_details_not_from_cache = 0;
 my $num_prog_details_total = 0;
+my $len_prog_not_printed = 0;
 
 my $passwordHash;
 
@@ -1532,6 +1533,15 @@ sub use_benchmark {
     return $enabled_flag;
 }
 
+# Return an approximation of the number in human terms.
+sub human_number {
+    my $value = shift;
+    return sprintf "%.1fGB", ($value / 1024 / 1024 / 1024) if ($value > 1024 * 1024 * 1024);
+    return sprintf "%.1fMB", ($value / 1024 / 1024) if ($value > 1024 * 1024);
+    return sprintf "%.1fKB", ($value / 1024) if ($value > 1024);
+    return "$value bytes";
+}
+
 sub output_xml {
 my $use_benchmark = use_benchmark();
 
@@ -1573,12 +1583,14 @@ $w->startTag('tv',
   }
 
   printf (STDERR "   $num_prog_from_cache programs retrieved from cache (%0.2f%%)\n", $num_prog_from_cache / $programsWritten * 100) if (!$quiet && $num_prog_from_cache);
+  printf (STDERR "   $num_prog_from_cache programs not output saving approx %s\n", human_number($len_prog_not_printed)) if $len_prog_not_printed;
   {
       # Unfortunately the "compute" tracks number computed not number from cache,
       # so calculate number from cache here.
       my $num_prog_details_from_cache = $num_prog_details_total - $num_prog_details_not_from_cache;
       printf (STDERR "   %d of %d program details retrieved from cache (%0.2f%%)\n", $num_prog_details_from_cache, $num_prog_details_total, $num_prog_details_from_cache / $num_prog_details_total * 100) if (!$quiet && $num_prog_details_from_cache > 0);
   }
+
   if ($use_benchmark) {
       printf (STDERR "   xmltv generation took %s\n", Benchmark::timestr(Benchmark::timediff($t_end, $t_start))) if (!$quiet);
   }
@@ -2616,13 +2628,17 @@ sub write_programme {
         # need to re-process the same information time and
         # time again.
         state $no_print = get_option('cache-ignore-unchanged-programmes');
-        # We should use "raw", but we'll just print
-        # directly for (a) speed and (b) to allow debug
-        # checking of rest of xml writer (which is not
-        # allowed with raw).
-        # $w->raw($cached_value);
-        print $cached_value unless $no_print;
-        # One more programme printed.
+        if ($no_print) {
+            $len_prog_not_printed += length($cached_value);
+        } else {
+            # We should use "raw", but we'll just print
+            # directly for (a) speed and (b) to allow debug
+            # checking of rest of xml writer (which is not
+            # allowed with raw).
+            # $w->raw($cached_value);
+            print $cached_value unless $no_print;
+        }
+        # One more programme processed.
         return 1;
     }
 
