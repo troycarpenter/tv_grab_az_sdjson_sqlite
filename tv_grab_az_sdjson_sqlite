@@ -3447,7 +3447,7 @@ sub lineupFetchAndValidate {
       {
           print (STDERR "Obtaining authentication token for Schedules Direct\n") if (!$quiet);
         SD_login();
-        $fetchLineupRequired |= SD_isLineupFetchRequired($_) for @{$conf->{lineup}};
+        $fetchLineupRequired |= SD_isLineupFetchRequired($conf->{lineup});
 
         if ($fetchLineupRequired)
           {
@@ -3501,8 +3501,6 @@ sub listChannels
     $conf = $conf_xmltv;
     $opt = $opt_xmltv;
 
-    my $fetchLineupRequired;
-
     configValidate($conf, $opt);
 
     $debug = $opt->{'debug'};
@@ -3523,7 +3521,6 @@ sub listChannels
 
     check_cache_clear();
     lineupFetchAndValidate($conf);
-
     my $w = XML::Writer->new( 'ENCODING' => 'UTF-8',
                               'DATA_MODE' => 1,
                               'DATA_INDENT' => 1,
@@ -4194,19 +4191,19 @@ sub SD_login
 # indicates (small, but occasionally useful, optimization).
 #
 #   Input:
-#              lineup      - the lineup to check
+#              lineup(s)   - the lineup(s) to check
 #   Output:
 #              result      - true (fetch required) or false
 #
 sub SD_isLineupFetchRequired
   {
-    my ($lineup, undef) = @_;
+    my ($lineups, undef) = @_;
 
     my $sql;
     my $sth;
     my $accountStatus;
     my $accountLineupModifiedDateTime;
-    my $fetchRequired;
+    my $fetchRequired = 0;
 
     $accountStatus = $SD->obtainStatus;
 
@@ -4215,28 +4212,9 @@ sub SD_isLineupFetchRequired
         print (STDERR "Unable to obtain Schedules Direct account status: " . $SD->ErrorString . "\n");
         exit(1);
       }
-    if (defined($accountStatus->{'lineups'}))
-      {
-        for my $l (@{$accountStatus->{'lineups'}})
-          {
-            if (defined($l->{'lineup'}) && ($l->{'lineup'} eq $lineup))
-              {
-                $accountLineupModifiedDateTime = DateTime::Format::ISO8601->parse_datetime($l->{'modified'});
-                last;
-              }
-            if (defined($l->{'ID'}) && ($l->{'ID'} eq $lineup))
-              {
-                $accountLineupModifiedDateTime = DateTime::Format::ISO8601->parse_datetime($l->{'modified'});
-                last;
-              }
-          }
-      }
 
-    $accountLineupModifiedDateTime = $nowDateTime->clone() if (!defined($accountLineupModifiedDateTime));
-
-
-    $sql = "select 1 from lineups l1 where (l1.lineup = ? and l1.modified <= ?) " .
-             "union select 1 where not exists (select 1 from lineups l2 where l2.lineup = ?)";
+    $sql = 'select 1 from lineups l1 where (l1.lineup = ? and l1.modified <= ?) ' .
+             'union select 1 where not exists (select 1 from lineups l2 where l2.lineup = ?)';
 
     $sth = $DBH->prepare_cached($sql);
     if (!defined($sth))
@@ -4245,21 +4223,46 @@ sub SD_isLineupFetchRequired
         exit(1);
       }
 
-    $sth->bind_param( 1, $lineup, SQL_VARCHAR );
-    $sth->bind_param( 2, DateTime::Format::SQLite->format_datetime($accountLineupModifiedDateTime), SQL_DATETIME );
-    $sth->bind_param( 3, $lineup, SQL_VARCHAR );
-
-    $sth->execute();
-
-    if ($sth->err())
+    # Since each lineup has a (potential) different modified date, we will do it the long way
+    for my $lineup(@{$lineups})
       {
-        print (STDERR "Unexpected error when executing statement ($sql): " . $sth->errstr . "\n");
-        exit(1)
+        undef $accountLineupModifiedDateTime;
+        if (defined($accountStatus->{'lineups'}))
+          {
+            for my $l (@{$accountStatus->{'lineups'}})
+              {
+                if (defined($l->{'lineup'}) && ($l->{'lineup'} eq $lineup))
+                  {
+                    $accountLineupModifiedDateTime = DateTime::Format::ISO8601->parse_datetime($l->{'modified'});
+                    last;
+                  }
+                if (defined($l->{'ID'}) && ($l->{'ID'} eq $lineup))
+                  {
+                    $accountLineupModifiedDateTime = DateTime::Format::ISO8601->parse_datetime($l->{'modified'});
+                    last;
+                  }
+              }
+          }
+
+        $accountLineupModifiedDateTime = $nowDateTime->clone() if (!defined($accountLineupModifiedDateTime));
+
+        $sth->bind_param( 1, $lineup, SQL_VARCHAR );
+        $sth->bind_param( 2, DateTime::Format::SQLite->format_datetime($accountLineupModifiedDateTime), SQL_DATETIME );
+        $sth->bind_param( 3, $lineup, SQL_VARCHAR );
+
+        $sth->execute();
+
+        if ($sth->err())
+          {
+            print (STDERR "Unexpected error when executing statement ($sql): " . $sth->errstr . "\n");
+            exit(1)
+          }
+
+        $fetchRequired |= ($sth->fetchrow_array() || 0);
+
+        $sth->finish();
+
       }
-
-    $fetchRequired = $sth->fetchrow_array() || 0;
-
-    $sth->finish();
 
     return ($fetchRequired);
   }
