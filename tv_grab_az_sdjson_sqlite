@@ -3593,30 +3593,6 @@ sub channelWriter
     # Collect some lineup information
     #
     my ($lineupsql, @bind) = sql_generate_lineup_query($lineupRef);
-    $sql = "select lineup, name, transport, location, details from lineups where $lineupsql";
-    $sth = $DBH->prepare_cached($sql);
-    if (!defined($sth))
-      {
-        print (STDERR "Unexpected error when preparing statement ($sql): " . $DBH->errstr . "\n");
-        exit(1);
-      }
-    $sth->execute(@bind);
-    if ($sth->err())
-      {
-        print (STDERR "Unexpected error when executing statement ($sql): " . $sth->errstr . "\n");
-        exit(1)
-      }
-    $sth->bind_col( 1, undef, SQL_VARCHAR );
-    $sth->bind_col( 2, undef, SQL_VARCHAR );
-    $sth->bind_col( 3, undef, SQL_VARCHAR );
-    $sth->bind_col( 4, undef, SQL_VARCHAR );
-    $sth->bind_col( 5, undef, SQL_VARCHAR );
-    my $l = $sth->fetchrow_arrayref();
-    $sth->finish();
-    my $lineupTransport = 'Unknown';
-    $lineupTransport = $l->[2] if (defined($l));
-
-    #
     # Select our lineup channels/stations
     #
     $sql = "select distinct channels.station, channels.channum, channels.details, stations.details from channels as channels left join stations as stations on stations.station = channels.station where $lineupsql and channels.selected = 1";
@@ -4425,7 +4401,7 @@ sub SD_downloadLineups
         my $name = $l->{'name'} || '';
         my $transport = $l->{'transport'} || '';
         my $location = $l->{'location'} || '';
-        my $details = $JSON->utf8->encode($l);
+        my $details = $JSON->utf8->canonical->encode($l);
         $sth->bind_param( 1, $id, SQL_VARCHAR );
         $sth->bind_param( 2, $name, SQL_VARCHAR );
         $sth->bind_param( 3, $location, SQL_VARCHAR );
@@ -4589,7 +4565,7 @@ sub SD_downloadLineupMaps
       {
         my $station = $c->{'stationID'};
         $station = '' if (!defined($station));
-        my $details = $JSON->utf8->encode($c);
+        my $details = $JSON->utf8->canonical->encode($c);
         my $channum = '';
         if (($lineupTransport eq 'Cable') ||
             ($lineupTransport eq 'Satellite') ||
@@ -4672,7 +4648,7 @@ sub SD_downloadLineupMaps
         # elements are hash refs so eval to avoid termination.
         my $station = eval { $s->{'stationID'} };
         next if (!defined($station));
-        my $details = $JSON->utf8->encode($s);
+        my $details = $JSON->utf8->canonical->encode($s);
 
         $sth->bind_param( 1, $station, SQL_VARCHAR );
         $sth->bind_param( 2, $details, SQL_VARCHAR );
