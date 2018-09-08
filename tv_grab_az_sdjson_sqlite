@@ -3572,27 +3572,28 @@ sub sql_generate_lineup_query {
 #
 # channelWriter
 #
-# Convenience routine to write the XMLTV channel.
+# Convenience routine to write the XMLTV channels.
 # Output is written to the xmltv writer
 #
 #   Input:
-#              lineup      - the lineup to use
+#              lineup(s)   - the lineup(s) to use
 #              writer      - the xmltv writer
 #   Output:
 #              written     - number of channels written
 #
 sub channelWriter
   {
-    my ($lineupRef, $writer, undef) = @_;
+    my ($lineups, $writer, undef) = @_;
 
     my $sql;
     my $sth;
+    my $param;
     my $channelsWritten = 0;
 
     #
     # Collect some lineup information
     #
-    my ($lineupsql, @bind) = sql_generate_lineup_query($lineupRef);
+    my ($lineupsql, @bind) = sql_generate_lineup_query($lineups);
     # Select our lineup channels/stations
     #
     $sql = "select distinct channels.station, channels.channum, channels.details, stations.details from channels as channels left join stations as stations on stations.station = channels.station where $lineupsql and channels.selected = 1";
@@ -4279,6 +4280,7 @@ sub SD_cleanLineups
   {
     my $sql;
     my $sth;
+    my $param;
     my $status;
     my @accountLineups = ();
 
@@ -4308,9 +4310,7 @@ sub SD_cleanLineups
           }
       }
 
-    my $in = join ',', map { "?" } @accountLineups;
-
-    $sql = "delete from lineups where lineup not in ( $in )";
+    $sql = 'delete from lineups where lineup not in ( ' . join(', ', ('?') x scalar(@accountLineups)) . ' )';
 
     $sth = $DBH->prepare_cached($sql);
     if (!defined($sth))
@@ -4319,7 +4319,15 @@ sub SD_cleanLineups
         exit(1);
       }
 
-    $sth->execute( @accountLineups );
+    $param = 1;
+    for (my $i=0; $i < scalar(@accountLineups); $i++)
+      {
+        $sth->bind_param( $param, $accountLineups[$i]);
+        $param++;
+      }
+
+    $sth->execute();
+
     if ($sth->err)
       {
         print (STDERR "Unexpected error when executing statement ($sql): " . $sth->errstr . "\n");
