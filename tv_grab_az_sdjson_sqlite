@@ -46,6 +46,26 @@
 #
 # 2017/11/30 - 1.35 - Populate thetvdb episode-num.
 # 2017/10/11 - 1.34 - download artwork.
+# 2018/09/05 - 1.53 - multi-lineup plumbing - configure
+# 2018/09/05 - 1.52 - add initial Schedules Direct "IPTV" transport
+# 2018/09/05 - 1.51 - multi-lineup plumbing - getLineup (v2)
+# 2018/09/05 - 1.50 - provide proper bind data types
+# 2018/09/04 - 1.49 - support short-name in getLineup for other types
+# 2018/09/03 - 1.48 - use available channum
+# 2018/09/02 - 1.47 - remove dead code
+# 2018/09/02 - 1.46 - fix grammer
+# 2018/08/30 - 1.45 - multi-lineup plumbing - mainline code
+# 2018/08/30 - 1.44 - multi-lineup plumbing - getLineup
+# 2018/08/30 - 1.43 - multi-lineup plumbing - SD_isLineupFetchRequired
+# 2018/08/30 - 1.42 - multi-lineup plumbing - lineupValidate
+# 2018/08/30 - 1.41 - multi-lineup plumbing - channelWriter
+# 2018/08/29 - 1.40 - multi-lineup plumbing - SD_cleanLineups
+# 2018/08/29 - 1.39 - multi-lineup plumbing - canonical lineup details
+# 2018/08/25 - 1.38 - remove dead code
+# 2018/08/25 - 1.37 - minor whitespace adjustments
+# 2018/06/17 - 1.36 - handle deleted lineups not having description
+# 2018/02/03 - 1.35 - remove lang from channel display-name
+# 2018/02/03 - 1.34 - remove use warning nonfatal experimental in package
 # 2017/07/21 - 1.33 - dtd compliance.  Only actors can have roles
 # 2017/06/19 - 1.32 - derive category from showtype
 # 2017/04/20 - 1.31 - provide fixup support
@@ -179,6 +199,7 @@ my $passwordHash;
 
 my $opt;
 my $conf;
+my $param;
 
 my %catmap_major = (
                     movie => "\N{CLAPPER BOARD}",
@@ -418,7 +439,7 @@ check_cache_clear();
 #
 if (!$download)
   {
-    lineupValidate($_) for @{$conf->{lineup}};
+    lineupValidate($conf->{'lineup'});
     goto skipDownload;
   }
 
@@ -459,7 +480,6 @@ print (STDERR "Downloading data from Schedules Direct\n") if (!$quiet);
 # based on $download to be compatible with list-channels and
 # list-lineups.
 my $fetchLineupRequired = lineupFetchAndValidate($conf);
-
 my $t_downloadstart = Benchmark->new if $use_benchmark;
 # We do this sequentially for the moment since we are
 # checking for lineups that are out of date or never
@@ -469,9 +489,7 @@ print STDERR "Downloading data for $lineup\n" unless $quiet;
 #
 # We can skip downloading station schedules if our data is current
 #
-
-$sql = "select 1 from lineups l1 where (l1.lineup = ? and l1.downloaded <= ?) " .
-         "union select 1 where not exists (select 1 from lineups l2 where l2.lineup = ?)";
+$sql = 'select 1 from lineups l1 where (l1.downloaded <= ? and l1.lineup in ( ' . join(', ', ('?') x scalar(@{$conf->{'lineup'}})) . ' )) union select 1 where not exists (select 1 from lineups l2 where l2.lineup in ( ' . join(', ', ('?') x scalar(@{$conf->{'lineup'}})) . ' ))';
 
 $sth = $DBH->prepare_cached($sql);
 if (!defined($sth))
@@ -480,9 +498,19 @@ if (!defined($sth))
     exit(1);
   }
 
-$sth->bind_param( 1, $lineup, SQL_VARCHAR );
-$sth->bind_param( 2, DateTime::Format::SQLite->format_datetime($dataLastUpdatedDateTime), SQL_DATETIME );
-$sth->bind_param( 3, $lineup, SQL_VARCHAR );
+$param = 1;
+$sth->bind_param( $param, DateTime::Format::SQLite->format_datetime($dataLastUpdatedDateTime), SQL_DATETIME );
+$param++;
+for (my $i=0; $i < scalar(@{$conf->{'lineup'}}); $i++)
+  {
+    $sth->bind_param( $param, @{$conf->{'lineup'}}[$i], SQL_VARCHAR);
+    $param++;
+  }
+for (my $i=0; $i < scalar(@{$conf->{'lineup'}}); $i++)
+  {
+    $sth->bind_param( $param, @{$conf->{'lineup'}}[$i], SQL_VARCHAR);
+    $param++;
+  }
 
 $sth->execute();
 
@@ -514,8 +542,7 @@ else
     # and deal with potential errors due to out of
     # range issues.
     #
-    $sql = "select distinct stations.station from stations as stations where stations.station in " .
-             " (select distinct channels.station from channels as channels where channels.lineup = ? and channels.selected = 1) " ;
+    $sql = 'select distinct stations.station from stations as stations where stations.station in (select distinct channels.station from channels as channels where channels.lineup in ( ' . join(', ', ('?') x scalar(@{$conf->{'lineup'}})) . ' ) and channels.selected = 1)';
 
     $sth = $DBH->prepare_cached($sql);
     if (!defined($sth))
@@ -524,7 +551,12 @@ else
         exit(1);
       }
 
-    $sth->bind_param( 1, $lineup, SQL_VARCHAR );
+    $param = 1;
+    for (my $i=0; $i < scalar(@{$conf->{'lineup'}}); $i++)
+      {
+        $sth->bind_param( $param, @{$conf->{'lineup'}}[$i], SQL_VARCHAR);
+        $param++;
+      }
 
     $sth->execute();
 
@@ -609,15 +641,21 @@ else
     #
     # Indicate we have downloaded the data
     #
-    $sql = "update lineups set downloaded = ? where lineup = ?";
+    $sql = 'update lineups set downloaded = ? where lineup in ( ' . join(', ', ('?') x scalar(@{$conf->{'lineup'}})) . ' )';
     $sth = $DBH->prepare_cached($sql);
     if (!defined($sth))
       {
         print (STDERR "Unexpected error when preparing statement ($sql): " . $DBH->errstr . "\n");
         exit(1);
       }
-    $sth->bind_param( 1, $nowDateTimeSQLite, SQL_DATETIME );
-    $sth->bind_param( 2, $lineup, SQL_VARCHAR );
+    $param = 1;
+    $sth->bind_param( $param, $nowDateTimeSQLite, SQL_DATETIME );
+    $param++;
+    for (my $i=0; $i < scalar(@{$conf->{'lineup'}}); $i++)
+      {
+        $sth->bind_param( $param, @{$conf->{'lineup'}}[$i], SQL_VARCHAR);
+        $param++;
+      }
     $sth->execute();
     if ($sth->err())
       {
@@ -663,7 +701,8 @@ for (my $retry = 0; $retry < 7; $retry++)
            " left outer join schedules_hash as schedules_hash on stations_schedules_hash.station = schedules_hash.station " .
            " AND stations_schedules_hash.day = schedules_hash.day " .
            " where (stations_schedules_hash.station in (select distinct channels.station " .
-           " from channels as channels where channels.lineup = ? and channels.selected = 1)) " .
+           " from channels as channels where channels.lineup in ( " .  join(', ', ('?') x scalar(@{$conf->{'lineup'}})) . " ) " .
+           " and channels.selected = 1)) " .
            " AND (schedules_hash.station is NULL OR schedules_hash.hash != stations_schedules_hash.hash) " .
            " AND stations_schedules_hash.day >= ? AND stations_schedules_hash.day < ? " .
            " ORDER by stations_schedules_hash.station, stations_schedules_hash.day";
@@ -675,9 +714,16 @@ for (my $retry = 0; $retry < 7; $retry++)
         exit(1);
       }
 
-    $sth->bind_param( 1, $lineup, SQL_VARCHAR );
-    $sth->bind_param( 2, DateTime::Format::SQLite->format_date($startDateTime), SQL_DATE );
-    $sth->bind_param( 3, DateTime::Format::SQLite->format_date($endDateTime), SQL_DATE );
+    $param = 1;
+    for (my $i=0; $i < scalar(@{$conf->{'lineup'}}); $i++)
+      {
+        $sth->bind_param( $param, @{$conf->{'lineup'}}[$i], SQL_VARCHAR);
+        $param++;
+      }
+    $sth->bind_param( $param, DateTime::Format::SQLite->format_date($startDateTime), SQL_DATE );
+    $param++;
+    $sth->bind_param( $param, DateTime::Format::SQLite->format_date($endDateTime), SQL_DATE );
+    $param++;
 
     $sth->execute();
     if ($sth->err)
@@ -913,7 +959,8 @@ for (my $retry = 0; $retry < 7; $retry++)
            " where (schedules.station in (select distinct stations.station " .
            " from stations as stations where stations.station " .
            " in (select distinct channels.station from channels channels " .
-           " where channels.lineup = ? and channels.selected = 1)) AND (programs.program is null OR schedules.program_hash != programs.hash)) " .
+           " where channels.lineup in ( " .  join(', ', ('?') x scalar(@{$conf->{'lineup'}})) . " ) and channels.selected = 1)) " .
+           " AND (programs.program is null OR schedules.program_hash != programs.hash)) " .
            " AND schedules.day >= ? AND schedules.day < ?" ;
 
     $sth = $DBH->prepare_cached($sql);
@@ -923,9 +970,16 @@ for (my $retry = 0; $retry < 7; $retry++)
         exit(1);
       }
 
-    $sth->bind_param( 1, $lineup, SQL_VARCHAR );
-    $sth->bind_param( 2, DateTime::Format::SQLite->format_date($startDateTime), SQL_DATE );
-    $sth->bind_param( 3, DateTime::Format::SQLite->format_date($endDateTime), SQL_DATE );
+    $param = 1;
+    for (my $i=0; $i < scalar(@{$conf->{'lineup'}}); $i++)
+      {
+        $sth->bind_param( $param, @{$conf->{'lineup'}}[$i], SQL_VARCHAR);
+        $param++;
+      }
+    $sth->bind_param( $param, DateTime::Format::SQLite->format_date($startDateTime), SQL_DATE );
+    $param++;
+    $sth->bind_param( $param, DateTime::Format::SQLite->format_date($endDateTime), SQL_DATE );
+    $param++;
 
     $sth->execute();
 
@@ -1061,7 +1115,8 @@ for (my $retry = 0; $retry < 7; $retry++)
            "    and p1.program in ( select schedules.program from schedules as schedules " .
            "      where (schedules.station in (select distinct stations.station from stations as stations " .
            "        where stations.station in (select distinct channels.station from channels channels " .
-           "          where channels.lineup = ? and channels.selected = 1)) " .
+           "          where channels.lineup in ( " .  join(', ', ('?') x scalar(@{$conf->{'lineup'}})) . " ) " .
+           "          and channels.selected = 1)) " .
            "        and schedules.day >= ? and schedules.day < ? ) ) ";
 
     $sth = $DBH->prepare_cached($sql);
@@ -1071,9 +1126,16 @@ for (my $retry = 0; $retry < 7; $retry++)
         exit(1);
       }
 
-    $sth->bind_param( 1, $lineup, SQL_VARCHAR );
-    $sth->bind_param( 2, DateTime::Format::SQLite->format_date($startDateTime), SQL_DATE );
-    $sth->bind_param( 3, DateTime::Format::SQLite->format_date($endDateTime), SQL_DATE );
+    $param = 1;
+    for (my $i=0; $i < scalar(@{$conf->{'lineup'}}); $i++)
+      {
+        $sth->bind_param( $param, @{$conf->{'lineup'}}[$i], SQL_VARCHAR);
+        $param++;
+      }
+    $sth->bind_param( $param, DateTime::Format::SQLite->format_date($startDateTime), SQL_DATE );
+    $param++;
+    $sth->bind_param( $param, DateTime::Format::SQLite->format_date($endDateTime), SQL_DATE );
+    $param++;
 
     $sth->execute();
 
@@ -3368,14 +3430,14 @@ sub configureGrabber
             exit(1);
           }
 
-        $writer->start_selectone
+        $writer->start_selectmany
           (
             {
               id => 'lineup',
               title => [ [ 'Schedules Direct Lineup', 'en' ] ],
               description =>
                 [ [
-                    'Select the lineup associated with this configuration',
+                    'Select the lineup(s) associated with this configuration',
                     'en'
                 ] ],
             }
@@ -3394,7 +3456,7 @@ sub configureGrabber
               );
           }
 
-        $writer->end_selectone();
+        $writer->end_selectmany();
 
         $writer->end('mythtv');
       }
@@ -3448,7 +3510,7 @@ sub lineupFetchAndValidate {
       {
           print (STDERR "Obtaining authentication token for Schedules Direct\n") if (!$quiet);
         SD_login();
-        $fetchLineupRequired |= SD_isLineupFetchRequired($_) for @{$conf->{lineup}};
+        $fetchLineupRequired |= SD_isLineupFetchRequired($conf->{lineup});
 
         if ($fetchLineupRequired)
           {
@@ -3502,8 +3564,6 @@ sub listChannels
     $conf = $conf_xmltv;
     $opt = $opt_xmltv;
 
-    my $fetchLineupRequired;
-
     configValidate($conf, $opt);
 
     $debug = $opt->{'debug'};
@@ -3524,7 +3584,6 @@ sub listChannels
 
     check_cache_clear();
     lineupFetchAndValidate($conf);
-
     my $w = XML::Writer->new( 'ENCODING' => 'UTF-8',
                               'DATA_MODE' => 1,
                               'DATA_INDENT' => 1,
@@ -3572,51 +3631,28 @@ sub sql_generate_lineup_query {
 #
 # channelWriter
 #
-# Convenience routine to write the XMLTV channel.
+# Convenience routine to write the XMLTV channels.
 # Output is written to the xmltv writer
 #
 #   Input:
-#              lineup      - the lineup to use
+#              lineup(s)   - the lineup(s) to use
 #              writer      - the xmltv writer
 #   Output:
 #              written     - number of channels written
 #
 sub channelWriter
   {
-    my ($lineupRef, $writer, undef) = @_;
+    my ($lineups, $writer, undef) = @_;
 
     my $sql;
     my $sth;
+    my $param;
     my $channelsWritten = 0;
 
     #
     # Collect some lineup information
     #
-    my ($lineupsql, @bind) = sql_generate_lineup_query($lineupRef);
-    $sql = "select lineup, name, transport, location, details from lineups where $lineupsql";
-    $sth = $DBH->prepare_cached($sql);
-    if (!defined($sth))
-      {
-        print (STDERR "Unexpected error when preparing statement ($sql): " . $DBH->errstr . "\n");
-        exit(1);
-      }
-    $sth->execute(@bind);
-    if ($sth->err())
-      {
-        print (STDERR "Unexpected error when executing statement ($sql): " . $sth->errstr . "\n");
-        exit(1)
-      }
-    $sth->bind_col( 1, undef, SQL_VARCHAR );
-    $sth->bind_col( 2, undef, SQL_VARCHAR );
-    $sth->bind_col( 3, undef, SQL_VARCHAR );
-    $sth->bind_col( 4, undef, SQL_VARCHAR );
-    $sth->bind_col( 5, undef, SQL_VARCHAR );
-    my $l = $sth->fetchrow_arrayref();
-    $sth->finish();
-    my $lineupTransport = 'Unknown';
-    $lineupTransport = $l->[2] if (defined($l));
-
-    #
+    my ($lineupsql, @bind) = sql_generate_lineup_query($lineups);
     # Select our lineup channels/stations
     #
     $sql = "select distinct channels.station, channels.channum, channels.details, stations.details from channels as channels left join stations as stations on stations.station = channels.station where $lineupsql and channels.selected = 1";
@@ -3645,7 +3681,7 @@ sub channelWriter
     while (my $r = $sth->fetchrow_arrayref())
       {
         my $sID = $r->[0];
-        my $channum = $r->[1] || '';
+        my $channum = $r->[1];
         my $c = $JSON->decode($r->[2]);
         my $s = {};
         if (defined($r->[3]))
@@ -3732,6 +3768,10 @@ sub listLineups
     $opt = $opt_xmltv;
     $conf = LoadConfig($opt->{'config-file'});
 
+    my $sql;
+    my $sth;
+    my $param;
+
     configValidate($conf, $opt);
 
     $debug = $opt->{'debug'};
@@ -3765,8 +3805,8 @@ sub listLineups
     print (STDERR "Downloading lineups from Schedules Direct\n") if ($download && !$quiet);
     SD_downloadLineups() if ($download);
 
-    my $sql = "select lineup, name, transport, location, details from lineups";
-    my $sth = $DBH->prepare_cached($sql);
+    $sql = 'select lineup, name, transport, location, details from lineups';
+    $sth = $DBH->prepare_cached($sql);
     if (!defined($sth))
       {
         print (STDERR "Unexpected error when preparing statement ($sql): " . $DBH->errstr . "\n");
@@ -3835,6 +3875,7 @@ sub getLineup
 
     $conf = $conf_xmltv;
     $opt = $opt_xmltv;
+
     configValidate($conf, $opt);
 
     $debug = $opt->{'debug'};
@@ -3868,12 +3909,10 @@ sub getLineup
                  'source-info-url'       => $SD_SITEURL );
 
     #
-    # Collect some lineup information
+    # Collect our lineup(s) information.
     #
 
-  # Need to output one xmltv lineup section per lineup.
-  for my $lineup (@{$conf->{lineup}}) {
-    my $sql = "select lineup, name, transport, location, details from lineups where lineup = ?";
+    $sql = 'select lineup, name, transport, location, details from lineups where lineup in ( ' . join(', ', ('?') x scalar(@{$conf->{'lineup'}})) . ' )';
 
     my $sth = $DBH->prepare_cached($sql);
     if (!defined($sth))
@@ -3882,7 +3921,14 @@ sub getLineup
         exit(1);
       }
 
-    $sth->execute($lineup);
+    $param = 1;
+    for (my $i=0; $i < scalar(@{$conf->{'lineup'}}); $i++)
+      {
+        $sth->bind_param( $param, @{$conf->{'lineup'}}[$i], SQL_VARCHAR);
+        $param++;
+      }
+
+    $sth->execute();
 
     if ($sth->err())
       {
@@ -3896,120 +3942,94 @@ sub getLineup
     $sth->bind_col( 4, undef, SQL_VARCHAR );
     $sth->bind_col( 5, undef, SQL_VARCHAR );
 
-    my $l = $sth->fetchrow_arrayref();
+    my $lu = $sth->fetchall_arrayref();
 
     $sth->finish();
 
 
-      my $id = $l->[0];
-      my $lineupDesc = "$l->[1] $l->[2] $l->[3]";
-      $w->startTag('xmltv-lineup', 'id' => $id );
-        my $SDtype = $l->[2] || 'Unknown';
-        my $type = mapTransport($l->[2]);
-        $w->dataElement('type', $type);
-        $w->dataElement('display-name', $lineupDesc);
+      for my $l (@{$lu})
+        {
+          my $id = $l->[0];
+          my $lineupDesc = "$l->[1] $l->[2] $l->[3]";
+          $w->startTag('xmltv-lineup', 'id' => $id );
+            my $type = mapTransport($l->[2]);
+            $w->dataElement('type', $type);
+            $w->dataElement('display-name', $lineupDesc);
 
-          #
-          # Process each channel/station in the lineup
-          #
+            #
+            # Process each channel/station in the lineup
+            #
 
-          $sql = "select channels.station, channels.details, stations.details from channels as channels left join stations as stations on stations.station = channels.station where channels.lineup = ? and channels.selected = 1";
+            $sql = 'select distinct channels.station, channels.channum, channels.details, stations.details, lineups.transport from channels as channels left join stations as stations on stations.station = channels.station left join lineups as lineups on lineups.lineup = channels.lineup where channels.lineup = ? and channels.selected = 1';
 
-          $sth = $DBH->prepare_cached($sql);
-          if (!defined($sth))
-            {
-              print (STDERR "Unexpected error when preparing statement ($sql): " . $DBH->errstr . "\n");
-              exit(1);
-            }
+            $sth = $DBH->prepare_cached($sql);
+            if (!defined($sth))
+              {
+                print (STDERR "Unexpected error when preparing statement ($sql): " . $DBH->errstr . "\n");
+                exit(1);
+              }
 
-          $sth->bind_param( 1, $lineup, SQL_VARCHAR );
+            $sth->bind_param( 1, $id, SQL_VARCHAR );
 
-          $sth->execute();
+            $sth->execute();
 
-          if ($sth->err())
-            {
-              print (STDERR "Unexpected error when executing statement ($sql): " . $sth->errstr . "\n");
-              exit(1)
-            }
+            if ($sth->err())
+              {
+                print (STDERR "Unexpected error when executing statement ($sql): " . $sth->errstr . "\n");
+                exit(1)
+              }
 
-          $sth->bind_col( 1, undef, SQL_VARCHAR );
-          $sth->bind_col( 2, undef, SQL_VARCHAR );
-          $sth->bind_col( 3, undef, SQL_VARCHAR );
+            $sth->bind_col( 1, undef, SQL_VARCHAR );
+            $sth->bind_col( 2, undef, SQL_VARCHAR );
+            $sth->bind_col( 3, undef, SQL_VARCHAR );
+            $sth->bind_col( 4, undef, SQL_VARCHAR );
+            $sth->bind_col( 5, undef, SQL_VARCHAR );
 
-          while (my $r = $sth->fetchrow_arrayref())
-            {
-              my $sID = $r->[0];
-              my $c = $JSON->decode($r->[1]);
-              my $s = $JSON->decode($r->[2]);
+            while (my $r = $sth->fetchrow_arrayref())
+              {
+                my $sID = $r->[0];
+                my $channum = $r->[1];
+                my $c = $JSON->decode($r->[2]);
+                my $s = $JSON->decode($r->[3]);
+                my $SDtype = $r->[4] || 'Unknown';
+                my $type = mapTransport($r->[4]);
 
-              $w->startTag('lineup-entry');
+                $w->startTag('lineup-entry');
 
-                if (($SDtype eq 'Cable') || ($SDtype eq 'Satellite'))
-                  {
-                    my $preset = $c->{'channel'};
-                    if (looks_like_number($preset))
-                      {
-                        $preset = 0 + $preset;
-                        $w->dataElement('preset', $preset);
-                      }
-                  }
-
-                if ($SDtype eq 'Antenna')
-                  {
-                    my $atscMajor = $c->{'atscMajor'};
-                    my $atscMinor = $c->{'atscMinor'};
-                    if (defined($atscMajor) && defined($atscMinor) &&
-                        looks_like_number($atscMajor) && looks_like_number($atscMinor))
-                      {
-                        $atscMajor = 0 + $atscMajor;
-                        $atscMinor = 0 + $atscMinor;
-                        $w->dataElement('preset', "$atscMajor.$atscMinor");
-                      }
-                  }
-
-                if ($SDtype eq 'DVB-T')
-                  {
-                    my $preset = $c->{'channel'};
-                    if (looks_like_number($preset))
-                      {
-                        $preset = 0 + $preset;
-                        $w->dataElement('preset', $preset);
-                      }
-                  }
-
-                $w->startTag('station', 'rfc2838' => generateRFC2838($sID) );
-
-                  $w->dataElement('name', $s->{'name'});
-
-                  if (($SDtype eq 'Cable') || ($SDtype eq 'Antenna'))
+                  if (defined($channum) && ($channum ne ''))
                     {
-                      if (defined($s->{'callsign'}))
-                        {
-                          $w->dataElement('short-name', $s->{'callsign'});
-                        }
+                      $w->dataElement('preset', $channum);
                     }
 
-                  # get-lineup proposal is not precise, but it appears we
-                  # should only return one logo, so return only the first
-                  if ((defined($s->{'stationLogo'}->[0]->{'URL'})) &&
-                      (!exists($GRABBER_FIXUPS->{'NO_STATION_LOGOS'})))
-                    {
-                      if (defined($s->{'stationLogo'}->[0]->{'width'}) && defined($s->{'stationLogo'}->[0]->{'height'}))
-                        {
-                          $w->emptyTag('logo', 'url' => $s->{'stationLogo'}->[0]->{'URL'},
-                                               'height' => $s->{'stationLogo'}->[0]->{'height'},
-                                               'width' => $s->{'stationLogo'}->[0]->{'width'});
-                        }
-                      else
-                        {
-                          $w->emptyTag('logo', 'url' => $s->{'stationLogo'}->[0]->{'URL'});
-                        }
+                  $w->startTag('station', 'rfc2838' => generateRFC2838($sID) );
 
-                    }
+                    my $name = $s->{'name'};
+                    my $shortname = $s->{'callsign'};
+                    $name = $shortname if (!defined($name) || ($name eq ''));
+                    $w->dataElement('name', $name) if (defined($name) && ($name ne ''));
+                    $w->dataElement('short-name', $shortname) if (defined($shortname) && ($shortname ne ''));
+
+                    # get-lineup proposal is not precise, but it appears we
+                    # should only return one logo, so return only the first
+                    if ((defined($s->{'stationLogo'}->[0]->{'URL'})) &&
+                        (!exists($GRABBER_FIXUPS->{'NO_STATION_LOGOS'})))
+                      {
+                        if (defined($s->{'stationLogo'}->[0]->{'width'}) && defined($s->{'stationLogo'}->[0]->{'height'}))
+                          {
+                            $w->emptyTag('logo', 'url' => $s->{'stationLogo'}->[0]->{'URL'},
+                                                 'height' => $s->{'stationLogo'}->[0]->{'height'},
+                                                 'width' => $s->{'stationLogo'}->[0]->{'width'});
+                          }
+                        else
+                          {
+                            $w->emptyTag('logo', 'url' => $s->{'stationLogo'}->[0]->{'URL'});
+                          }
+
+                      }
 
                   $w->endTag('station');
 
-                  if (($SDtype eq 'Cable') || ($SDtype eq 'Satellite'))
+                  if (($SDtype eq 'Cable') || ($SDtype eq 'Satellite') || ($SDtype eq 'IPTV'))
                     {
                       $w->startTag('stb-channel');
                       if (defined($c->{'channel'}) && looks_like_number($c->{'channel'}))
@@ -4025,7 +4045,6 @@ sub getLineup
                     {
                       my $atscMajor = $c->{'atscMajor'};
                       my $atscMinor = $c->{'atscMinor'};
-                      my $number = $c->{'uhfVhf'} || "0";
 
                       my $ATSC = (defined($atscMajor) && defined($atscMinor) &&
                                   looks_like_number($atscMajor) && looks_like_number($atscMinor));
@@ -4034,7 +4053,6 @@ sub getLineup
                         {
                           $atscMajor = 0 + $atscMajor;
                           $atscMinor = 0 + $atscMinor;
-                          $number = "$atscMajor.$atscMinor";
                           $w->startTag('atsc-channel');
                             $w->dataElement('system', 'US-ATSC');
                         }
@@ -4044,28 +4062,32 @@ sub getLineup
                             $w->dataElement('system', 'NTSC-M');
                         }
 
-                        $w->dataElement('number', $number);
+                      if (defined($channum) && ($channum ne ''))
+                        {
+                          $w->dataElement('number', $channum);
+                        }
 
-                        my $fccChan = $c->{'uhfVhf'};
-                        if (defined($fccChan))
-                          {
-                            $w->dataElement('frequency', mapUSATSCChannelToFrequency($fccChan));
-                          }
+                      my $fccChan = $c->{'uhfVhf'};
+                      if (defined($fccChan))
+                        {
+                          $w->dataElement('frequency', mapUSATSCChannelToFrequency($fccChan));
+                        }
 
-                        if ($ATSC)
-                          {
-                            # This will be wrong some of the time, but until
-                            # we get better data, it is what it is (and it
-                            # turns out it is correct a lot of the time)
-                            $w->dataElement('program', $atscMinor);
-                          }
+                      if ($ATSC)
+                        {
+                          # This will be wrong some of the time, but until
+                          # we get better data, it is what it is (and it
+                          # turns out it is correct a lot of the time)
+                          $w->dataElement('program', $atscMinor);
+                        }
 
-                        if (defined($s->{'callsign'}))
-                          {
-                            $w->dataElement('fcc-callsign', $s->{'callsign'});
-                          }
-                        # Needed for xsd compliance, even though it was supposed to be optional for US analog
-                        #$w->emptyTag('cni','tt-8-30-1' => '');
+                      if (defined($s->{'callsign'}))
+                        {
+                          $w->dataElement('fcc-callsign', $s->{'callsign'});
+                        }
+
+                      # Needed for xsd compliance, even though it was supposed to be optional for US analog
+                      $w->emptyTag('cni','tt-8-30-1' => '') if (!$ATSC);
 
                       if ($ATSC)
                         {
@@ -4104,21 +4126,28 @@ sub getLineup
                             $serviceID = 0 + $serviceID;
                             $w->dataElement('service-id', $serviceID);
                           }
-                        my $lcn = $c->{'channel'};
+                        my $lcn = $c->{'logicalChannelNumber'};
                         if (defined($lcn) && looks_like_number($lcn))
                           {
                             $lcn = 0 + $lcn;
                             $w->dataElement('lcn', $lcn);
                           }
+                        my $provider = $c->{'providerCallsign'};
+                        if (defined($provider))
+                          {
+                            $w->dataElement('provider-name', $provider);
+                          }
                       $w->endTag('dvb-channel');
                     }
 
-              $w->endTag('lineup-entry');
-            }
-      $w->endTag('xmltv-lineup');
-    }                        # Each lineup in config file.
+                $w->endTag('lineup-entry');
+              }
+
+          $w->endTag('xmltv-lineup');
+        }
 
     $w->endTag('xmltv-lineups');
+
     $w->end();
 
     return(encode('UTF-8', $w->to_string));
@@ -4218,19 +4247,19 @@ sub SD_login
 # indicates (small, but occasionally useful, optimization).
 #
 #   Input:
-#              lineup      - the lineup to check
+#              lineup(s)   - the lineup(s) to check
 #   Output:
 #              result      - true (fetch required) or false
 #
 sub SD_isLineupFetchRequired
   {
-    my ($lineup, undef) = @_;
+    my ($lineups, undef) = @_;
 
     my $sql;
     my $sth;
     my $accountStatus;
     my $accountLineupModifiedDateTime;
-    my $fetchRequired;
+    my $fetchRequired = 0;
 
     $accountStatus = $SD->obtainStatus;
 
@@ -4239,28 +4268,9 @@ sub SD_isLineupFetchRequired
         print (STDERR "Unable to obtain Schedules Direct account status: " . $SD->ErrorString . "\n");
         exit(1);
       }
-    if (defined($accountStatus->{'lineups'}))
-      {
-        for my $l (@{$accountStatus->{'lineups'}})
-          {
-            if (defined($l->{'lineup'}) && ($l->{'lineup'} eq $lineup))
-              {
-                $accountLineupModifiedDateTime = DateTime::Format::ISO8601->parse_datetime($l->{'modified'});
-                last;
-              }
-            if (defined($l->{'ID'}) && ($l->{'ID'} eq $lineup))
-              {
-                $accountLineupModifiedDateTime = DateTime::Format::ISO8601->parse_datetime($l->{'modified'});
-                last;
-              }
-          }
-      }
 
-    $accountLineupModifiedDateTime = $nowDateTime->clone() if (!defined($accountLineupModifiedDateTime));
-
-
-    $sql = "select 1 from lineups l1 where (l1.lineup = ? and l1.modified <= ?) " .
-             "union select 1 where not exists (select 1 from lineups l2 where l2.lineup = ?)";
+    $sql = 'select 1 from lineups l1 where (l1.lineup = ? and l1.modified <= ?) ' .
+             'union select 1 where not exists (select 1 from lineups l2 where l2.lineup = ?)';
 
     $sth = $DBH->prepare_cached($sql);
     if (!defined($sth))
@@ -4269,21 +4279,46 @@ sub SD_isLineupFetchRequired
         exit(1);
       }
 
-    $sth->bind_param( 1, $lineup, SQL_VARCHAR );
-    $sth->bind_param( 2, DateTime::Format::SQLite->format_datetime($accountLineupModifiedDateTime), SQL_DATETIME );
-    $sth->bind_param( 3, $lineup, SQL_VARCHAR );
-
-    $sth->execute();
-
-    if ($sth->err())
+    # Since each lineup has a (potential) different modified date, we will do it the long way
+    for my $lineup(@{$lineups})
       {
-        print (STDERR "Unexpected error when executing statement ($sql): " . $sth->errstr . "\n");
-        exit(1)
+        undef $accountLineupModifiedDateTime;
+        if (defined($accountStatus->{'lineups'}))
+          {
+            for my $l (@{$accountStatus->{'lineups'}})
+              {
+                if (defined($l->{'lineup'}) && ($l->{'lineup'} eq $lineup))
+                  {
+                    $accountLineupModifiedDateTime = DateTime::Format::ISO8601->parse_datetime($l->{'modified'});
+                    last;
+                  }
+                if (defined($l->{'ID'}) && ($l->{'ID'} eq $lineup))
+                  {
+                    $accountLineupModifiedDateTime = DateTime::Format::ISO8601->parse_datetime($l->{'modified'});
+                    last;
+                  }
+              }
+          }
+
+        $accountLineupModifiedDateTime = $nowDateTime->clone() if (!defined($accountLineupModifiedDateTime));
+
+        $sth->bind_param( 1, $lineup, SQL_VARCHAR );
+        $sth->bind_param( 2, DateTime::Format::SQLite->format_datetime($accountLineupModifiedDateTime), SQL_DATETIME );
+        $sth->bind_param( 3, $lineup, SQL_VARCHAR );
+
+        $sth->execute();
+
+        if ($sth->err())
+          {
+            print (STDERR "Unexpected error when executing statement ($sql): " . $sth->errstr . "\n");
+            exit(1)
+          }
+
+        $fetchRequired |= ($sth->fetchrow_array() || 0);
+
+        $sth->finish();
+
       }
-
-    $fetchRequired = $sth->fetchrow_array() || 0;
-
-    $sth->finish();
 
     return ($fetchRequired);
   }
@@ -4303,6 +4338,7 @@ sub SD_cleanLineups
   {
     my $sql;
     my $sth;
+    my $param;
     my $status;
     my @accountLineups = ();
 
@@ -4332,9 +4368,7 @@ sub SD_cleanLineups
           }
       }
 
-    my $in = join ',', map { "?" } @accountLineups;
-
-    $sql = "delete from lineups where lineup not in ( $in )";
+    $sql = 'delete from lineups where lineup not in ( ' . join(', ', ('?') x scalar(@accountLineups)) . ' )';
 
     $sth = $DBH->prepare_cached($sql);
     if (!defined($sth))
@@ -4343,7 +4377,15 @@ sub SD_cleanLineups
         exit(1);
       }
 
-    $sth->execute( @accountLineups );
+    $param = 1;
+    for (my $i=0; $i < scalar(@accountLineups); $i++)
+      {
+        $sth->bind_param( $param, $accountLineups[$i], SQL_VARCHAR);
+        $param++;
+      }
+
+    $sth->execute();
+
     if ($sth->err)
       {
         print (STDERR "Unexpected error when executing statement ($sql): " . $sth->errstr . "\n");
@@ -4425,7 +4467,7 @@ sub SD_downloadLineups
         my $name = $l->{'name'} || '';
         my $transport = $l->{'transport'} || '';
         my $location = $l->{'location'} || '';
-        my $details = $JSON->utf8->encode($l);
+        my $details = $JSON->utf8->canonical->encode($l);
         $sth->bind_param( 1, $id, SQL_VARCHAR );
         $sth->bind_param( 2, $name, SQL_VARCHAR );
         $sth->bind_param( 3, $location, SQL_VARCHAR );
@@ -4589,13 +4631,14 @@ sub SD_downloadLineupMaps
       {
         my $station = $c->{'stationID'};
         $station = '' if (!defined($station));
-        my $details = $JSON->utf8->encode($c);
+        my $details = $JSON->utf8->canonical->encode($c);
         my $channum = '';
         if (($lineupTransport eq 'Cable') ||
             ($lineupTransport eq 'Satellite') ||
             ($lineupTransport eq 'DVB-C') ||
             ($lineupTransport eq 'DVB-T') ||
-            ($lineupTransport eq 'DVB-S'))
+            ($lineupTransport eq 'DVB-S') ||
+            ($lineupTransport eq 'IPTV'))
           {
             $channum = $c->{'channel'} if (defined($c->{'channel'}));
             $channum = 0 + $channum if (looks_like_number($channum));
@@ -4672,7 +4715,7 @@ sub SD_downloadLineupMaps
         # elements are hash refs so eval to avoid termination.
         my $station = eval { $s->{'stationID'} };
         next if (!defined($station));
-        my $details = $JSON->utf8->encode($s);
+        my $details = $JSON->utf8->canonical->encode($s);
 
         $sth->bind_param( 1, $station, SQL_VARCHAR );
         $sth->bind_param( 2, $details, SQL_VARCHAR );
@@ -4711,21 +4754,24 @@ sub SD_downloadLineupMaps
 #
 # lineupValidate
 #
-# Convenience routine to validate that the configured
-# lineup is still in our Schedules Direct lineup
+# Convenience routine to validate that the specified
+# lineup(s) are still in our Schedules Direct lineup
 #
 # If the lineup is not valid we write a message and exit
 #
 #   Input:
-#              lineup      - Lineup to validate
+#              lineup(s)    - Lineup(s) to validate
 #   Output:
 #              <none>
 #
 sub lineupValidate
   {
-    my ($lineup, undef) = @_;
+    my ($lineups, undef) = @_;
+    my @lineups = ref($lineups) eq 'ARRAY' ? @{$lineups} : ($lineups);
 
-    my $sql = "select lineup, name, transport, location, details from lineups where lineup = ?";
+    my $fatal = 0;
+
+    my $sql = 'select lineup, name, transport, location, details from lineups where lineup = ?';
 
     my $sth = $DBH->prepare_cached($sql);
     if (!defined($sth))
@@ -4734,45 +4780,53 @@ sub lineupValidate
         exit(1);
       }
 
-    $sth->bind_param( 1, $lineup, SQL_VARCHAR );
-
-    $sth->execute();
-
-    if ($sth->err())
+    foreach my $lineup (@lineups)
       {
-        print (STDERR "Unexpected error when executing statement ($sql): " . $sth->errstr . "\n");
-        exit(1)
+        $sth->bind_param( 1, $lineup, SQL_VARCHAR );
+
+        $sth->execute();
+
+        if ($sth->err())
+          {
+            print (STDERR "Unexpected error when executing statement ($sql): " . $sth->errstr . "\n");
+            exit(1)
+           }
+
+        $sth->bind_col( 1, undef, SQL_VARCHAR );
+        $sth->bind_col( 2, undef, SQL_VARCHAR );
+        $sth->bind_col( 3, undef, SQL_VARCHAR );
+        $sth->bind_col( 4, undef, SQL_VARCHAR );
+        $sth->bind_col( 5, undef, SQL_VARCHAR );
+
+        my $llu = $sth->fetchrow_arrayref();
+
+        $sth->finish();
+
+        if (!defined($llu))
+          {
+            print (STDERR "Lineup $lineup is no longer configured in your account at Schedules Direct.\n");
+            print (STDERR "Please run $SCRIPT_NAME --manage-lineups to manage your Schedules Direct lineups,\n");
+            print (STDERR "and/or $SCRIPT_NAME --configure to change the configured lineups.\n");
+            $fatal = 1;
+          }
+        else
+          {
+            my $lineupDeleted = $JSON->utf8->decode($llu->[4])->{'isDeleted'};
+
+            if (defined($lineupDeleted) && $lineupDeleted)
+              {
+                print (STDERR "Lineup $lineup has been deleted at Schedules Direct.\n");
+                print (STDERR "Please run $SCRIPT_NAME --manage-lineups to manage your Schedules Direct lineups,\n");
+                print (STDERR "and/or $SCRIPT_NAME --configure to change the configured lineups.\n");
+                $fatal = 1;
+              }
+          }
       }
 
-    $sth->bind_col( 1, undef, SQL_VARCHAR );
-    $sth->bind_col( 2, undef, SQL_VARCHAR );
-    $sth->bind_col( 3, undef, SQL_VARCHAR );
-    $sth->bind_col( 4, undef, SQL_VARCHAR );
-    $sth->bind_col( 5, undef, SQL_VARCHAR );
-
-    my $llu = $sth->fetchrow_arrayref();
-
-    $sth->finish();
-
-    if (!defined($llu))
+    if ($fatal)
       {
-        print (STDERR "Lineup $lineup is no longer configured at Schedules Direct\n");
-        print (STDERR "Please run $SCRIPT_NAME --manage-lineups to manage your Schedules Direct lineups\n");
-        print (STDERR "and/or $SCRIPT_NAME --configure to change the configured lineup\n");
         exit(1);
       }
-
-    my $lineupDeleted = $JSON->utf8->decode($llu->[4])->{'isDeleted'};
-
-    if (defined($lineupDeleted) && $lineupDeleted)
-      {
-        print (STDERR "Lineup $lineup has been deleted at Schedules Direct\n");
-        print (STDERR "Please run $SCRIPT_NAME --manage-lineups to manage your Schedules Direct lineups\n");
-        print (STDERR "and/or $SCRIPT_NAME --configure to change the configured lineup\n");
-        exit(1);
-      }
-
-    return;
   }
 
 #
@@ -6159,7 +6213,7 @@ sub manageLineups
                     my $rowid = 0;
                     my $selected = 1;
                     my $station = '';
-                    my $channum = '0';
+                    my $channum = '';
                     my $cdetails = '';
                     my $sdetails = '';
                     my $sql = "select channels.rowid, channels.station, channels.channum, channels.selected, channels.details, stations.details from channels as channels left join stations as stations on stations.station = channels.station where channels.lineup = ?";
@@ -6201,9 +6255,13 @@ sub manageLineups
                         my $callsign;
                         $callsign = $s->{'callsign'} if (defined($s->{'callsign'}));
                         my $i = '';
-                        $i .= "$channum " if (defined($channum));
+                        $i .= "$channum " if ($channum ne '');
                         $i .= "$name " if (defined($name));
                         $i .= "$callsign " if (defined($callsign));
+                        if ($i eq '')
+                          {
+                            $i = 'Unknown';
+                          }
                         my $ans = ask_boolean($i, $selected);
                         $ans = $selected if (!defined($ans));
                         $sthupd->bind_param( 1, $ans, SQL_INTEGER );
@@ -6369,7 +6427,8 @@ sub mapTransport
         'DVB-S'          => 'DTV',         # DVB-S (should be STB?)
         'Cable'          => 'STB',         # Cable (most use a STB?)
         'Antenna'        => 'DTV',         # Antenna (US ATSC and/or analog)
-        'Satellite'      => 'STB'          # Satellite (most use a STB?)
+        'Satellite'      => 'STB',         # Satellite (most use a STB?)
+        'IPTV'           => 'STB'          # Schedules Direct IPTV is STB-like
       };
 
     if (defined($transportTypeMap->{$transport}))
