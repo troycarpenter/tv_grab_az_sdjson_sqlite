@@ -46,6 +46,7 @@
 #
 # 2017/11/30 - 1.35 - Populate thetvdb episode-num.
 # 2017/10/11 - 1.34 - download artwork.
+# 2018/09/05 - 1.50 - provide proper bind data types
 # 2018/09/04 - 1.49 - support short-name in getLineup for other types
 # 2018/09/03 - 1.48 - use available channum
 # 2018/09/02 - 1.47 - remove dead code
@@ -499,12 +500,12 @@ $sth->bind_param( $param, DateTime::Format::SQLite->format_datetime($dataLastUpd
 $param++;
 for (my $i=0; $i < scalar(@{$conf->{'lineup'}}); $i++)
   {
-    $sth->bind_param( $param, @{$conf->{'lineup'}}[$i]);
+    $sth->bind_param( $param, @{$conf->{'lineup'}}[$i], SQL_VARCHAR);
     $param++;
   }
 for (my $i=0; $i < scalar(@{$conf->{'lineup'}}); $i++)
   {
-    $sth->bind_param( $param, @{$conf->{'lineup'}}[$i]);
+    $sth->bind_param( $param, @{$conf->{'lineup'}}[$i], SQL_VARCHAR);
     $param++;
   }
 
@@ -550,7 +551,7 @@ else
     $param = 1;
     for (my $i=0; $i < scalar(@{$conf->{'lineup'}}); $i++)
       {
-        $sth->bind_param( $param, @{$conf->{'lineup'}}[$i]);
+        $sth->bind_param( $param, @{$conf->{'lineup'}}[$i], SQL_VARCHAR);
         $param++;
       }
 
@@ -649,7 +650,7 @@ else
     $param++;
     for (my $i=0; $i < scalar(@{$conf->{'lineup'}}); $i++)
       {
-        $sth->bind_param( $param, @{$conf->{'lineup'}}[$i]);
+        $sth->bind_param( $param, @{$conf->{'lineup'}}[$i], SQL_VARCHAR);
         $param++;
       }
     $sth->execute();
@@ -713,7 +714,7 @@ for (my $retry = 0; $retry < 7; $retry++)
     $param = 1;
     for (my $i=0; $i < scalar(@{$conf->{'lineup'}}); $i++)
       {
-        $sth->bind_param( $param, @{$conf->{'lineup'}}[$i]);
+        $sth->bind_param( $param, @{$conf->{'lineup'}}[$i], SQL_VARCHAR);
         $param++;
       }
     $sth->bind_param( $param, DateTime::Format::SQLite->format_date($startDateTime), SQL_DATE );
@@ -969,7 +970,7 @@ for (my $retry = 0; $retry < 7; $retry++)
     $param = 1;
     for (my $i=0; $i < scalar(@{$conf->{'lineup'}}); $i++)
       {
-        $sth->bind_param( $param, @{$conf->{'lineup'}}[$i]);
+        $sth->bind_param( $param, @{$conf->{'lineup'}}[$i], SQL_VARCHAR);
         $param++;
       }
     $sth->bind_param( $param, DateTime::Format::SQLite->format_date($startDateTime), SQL_DATE );
@@ -1125,7 +1126,7 @@ for (my $retry = 0; $retry < 7; $retry++)
     $param = 1;
     for (my $i=0; $i < scalar(@{$conf->{'lineup'}}); $i++)
       {
-        $sth->bind_param( $param, @{$conf->{'lineup'}}[$i]);
+        $sth->bind_param( $param, @{$conf->{'lineup'}}[$i], SQL_VARCHAR);
         $param++;
       }
     $sth->bind_param( $param, DateTime::Format::SQLite->format_date($startDateTime), SQL_DATE );
@@ -3955,7 +3956,12 @@ sub getLineup
               exit(1);
             }
 
-          $sth->bind_param( 1, $lineup, SQL_VARCHAR );
+          $param = 1;
+          for (my $i=0; $i < scalar(@{$conf->{'lineup'}}); $i++)
+            {
+              $sth->bind_param( $param, @{$conf->{'lineup'}}[$i], SQL_VARCHAR);
+              $param++;
+            }
 
           $sth->execute();
 
@@ -4363,7 +4369,7 @@ sub SD_cleanLineups
     $param = 1;
     for (my $i=0; $i < scalar(@accountLineups); $i++)
       {
-        $sth->bind_param( $param, $accountLineups[$i]);
+        $sth->bind_param( $param, $accountLineups[$i], SQL_VARCHAR);
         $param++;
       }
 
