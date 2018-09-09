@@ -46,6 +46,7 @@
 #
 # 2017/11/30 - 1.35 - Populate thetvdb episode-num.
 # 2017/10/11 - 1.34 - download artwork.
+# 2018/09/05 - 1.52 - add initial Schedules Direct "IPTV" transport
 # 2018/09/05 - 1.51 - multi-lineup plumbing - getLineup (v2)
 # 2018/09/05 - 1.50 - provide proper bind data types
 # 2018/09/04 - 1.49 - support short-name in getLineup for other types
@@ -4027,7 +4028,7 @@ sub getLineup
 
                   $w->endTag('station');
 
-                  if (($SDtype eq 'Cable') || ($SDtype eq 'Satellite'))
+                  if (($SDtype eq 'Cable') || ($SDtype eq 'Satellite') || ($SDtype eq 'IPTV'))
                     {
                       $w->startTag('stb-channel');
                       if (defined($c->{'channel'}) && looks_like_number($c->{'channel'}))
@@ -4635,7 +4636,8 @@ sub SD_downloadLineupMaps
             ($lineupTransport eq 'Satellite') ||
             ($lineupTransport eq 'DVB-C') ||
             ($lineupTransport eq 'DVB-T') ||
-            ($lineupTransport eq 'DVB-S'))
+            ($lineupTransport eq 'DVB-S') ||
+            ($lineupTransport eq 'IPTV'))
           {
             $channum = $c->{'channel'} if (defined($c->{'channel'}));
             $channum = 0 + $channum if (looks_like_number($channum));
@@ -6424,7 +6426,8 @@ sub mapTransport
         'DVB-S'          => 'DTV',         # DVB-S (should be STB?)
         'Cable'          => 'STB',         # Cable (most use a STB?)
         'Antenna'        => 'DTV',         # Antenna (US ATSC and/or analog)
-        'Satellite'      => 'STB'          # Satellite (most use a STB?)
+        'Satellite'      => 'STB',         # Satellite (most use a STB?)
+        'IPTV'           => 'STB'          # Schedules Direct IPTV is STB-like
       };
 
     if (defined($transportTypeMap->{$transport}))
