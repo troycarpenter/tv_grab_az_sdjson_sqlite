@@ -71,7 +71,8 @@ lineup=XXX-890A-DEFAULT
 Then the three lineups are fetched and all the channels and programmes
 from all three lineups are output in the same xmltv output file.
 
-Note that the program's UI does not support multiple lineups.
+Alternatively the UI can be used with the --configure option to
+add all lineups to the configuration file.
 
 Local Caching of Formatted Data
 -------------------------------
