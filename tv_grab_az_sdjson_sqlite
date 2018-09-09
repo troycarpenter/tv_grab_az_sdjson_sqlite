@@ -3655,7 +3655,7 @@ sub channelWriter
     my ($lineupsql, @bind) = sql_generate_lineup_query($lineups);
     # Select our lineup channels/stations
     #
-    $sql = "select distinct channels.station, channels.channum, channels.details, stations.details from channels as channels left join stations as stations on stations.station = channels.station where $lineupsql and channels.selected = 1";
+    $sql = "select distinct channels.station, channels.channum, channels.details, stations.details from channels as channels left join stations as stations on stations.station = channels.station where $lineupsql and channels.selected = 1 order by 1";
 
     $sth = $DBH->prepare_cached($sql);
     if (!defined($sth))
