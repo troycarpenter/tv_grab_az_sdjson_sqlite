@@ -46,6 +46,7 @@
 #
 # 2017/11/30 - 1.35 - Populate thetvdb episode-num.
 # 2017/10/11 - 1.34 - download artwork.
+# 2018/09/05 - 1.51 - multi-lineup plumbing - getLineup (v2)
 # 2018/09/05 - 1.50 - provide proper bind data types
 # 2018/09/04 - 1.49 - support short-name in getLineup for other types
 # 2018/09/03 - 1.48 - use available channum
@@ -3765,6 +3766,10 @@ sub listLineups
     $opt = $opt_xmltv;
     $conf = LoadConfig($opt->{'config-file'});
 
+    my $sql;
+    my $sth;
+    my $param;
+
     configValidate($conf, $opt);
 
     $debug = $opt->{'debug'};
@@ -3798,8 +3803,8 @@ sub listLineups
     print (STDERR "Downloading lineups from Schedules Direct\n") if ($download && !$quiet);
     SD_downloadLineups() if ($download);
 
-    my $sql = "select lineup, name, transport, location, details from lineups";
-    my $sth = $DBH->prepare_cached($sql);
+    $sql = 'select lineup, name, transport, location, details from lineups';
+    $sth = $DBH->prepare_cached($sql);
     if (!defined($sth))
       {
         print (STDERR "Unexpected error when preparing statement ($sql): " . $DBH->errstr . "\n");
@@ -3902,12 +3907,10 @@ sub getLineup
                  'source-info-url'       => $SD_SITEURL );
 
     #
-    # Collect some lineup information.  We use the first lineup for details
+    # Collect our lineup(s) information.
     #
 
-  # Need to output one xmltv lineup section per lineup.
-  for my $lineup (@{$conf->{lineup}}) {
-    my $sql = "select lineup, name, transport, location, details from lineups where lineup = ?";
+    $sql = 'select lineup, name, transport, location, details from lineups where lineup in ( ' . join(', ', ('?') x scalar(@{$conf->{'lineup'}})) . ' )';
 
     my $sth = $DBH->prepare_cached($sql);
     if (!defined($sth))
@@ -3916,7 +3919,14 @@ sub getLineup
         exit(1);
       }
 
-    $sth->execute($lineup);
+    $param = 1;
+    for (my $i=0; $i < scalar(@{$conf->{'lineup'}}); $i++)
+      {
+        $sth->bind_param( $param, @{$conf->{'lineup'}}[$i], SQL_VARCHAR);
+        $param++;
+      }
+
+    $sth->execute();
 
     if ($sth->err())
       {
@@ -3930,94 +3940,90 @@ sub getLineup
     $sth->bind_col( 4, undef, SQL_VARCHAR );
     $sth->bind_col( 5, undef, SQL_VARCHAR );
 
-    my $l = $sth->fetchrow_arrayref();
+    my $lu = $sth->fetchall_arrayref();
 
     $sth->finish();
 
 
-      my $id = $l->[0];
-      my $lineupDesc = "$l->[1] $l->[2] $l->[3]";
-      $w->startTag('xmltv-lineup', 'id' => $id );
-        my $SDtype = $l->[2] || 'Unknown';
-        my $type = mapTransport($l->[2]);
-        $w->dataElement('type', $type);
-        $w->dataElement('display-name', $lineupDesc);
+      for my $l (@{$lu})
+        {
+          my $id = $l->[0];
+          my $lineupDesc = "$l->[1] $l->[2] $l->[3]";
+          $w->startTag('xmltv-lineup', 'id' => $id );
+            my $type = mapTransport($l->[2]);
+            $w->dataElement('type', $type);
+            $w->dataElement('display-name', $lineupDesc);
 
-          #
-          # Process each channel/station in the lineup
-          #
+            #
+            # Process each channel/station in the lineup
+            #
 
-          $sql = 'select distinct channels.station, channels.channum, channels.details, stations.details, lineups.transport from channels as channels left join stations as stations on stations.station = channels.station left join lineups as lineups on lineups.lineup = channels.lineup where channels.lineup in ( ' . join(', ', ('?') x scalar(@{$conf->{'lineup'}})) . ' ) and channels.selected = 1';
+            $sql = 'select distinct channels.station, channels.channum, channels.details, stations.details, lineups.transport from channels as channels left join stations as stations on stations.station = channels.station left join lineups as lineups on lineups.lineup = channels.lineup where channels.lineup = ? and channels.selected = 1';
 
-          $sth = $DBH->prepare_cached($sql);
-          if (!defined($sth))
-            {
-              print (STDERR "Unexpected error when preparing statement ($sql): " . $DBH->errstr . "\n");
-              exit(1);
-            }
+            $sth = $DBH->prepare_cached($sql);
+            if (!defined($sth))
+              {
+                print (STDERR "Unexpected error when preparing statement ($sql): " . $DBH->errstr . "\n");
+                exit(1);
+              }
 
-          $param = 1;
-          for (my $i=0; $i < scalar(@{$conf->{'lineup'}}); $i++)
-            {
-              $sth->bind_param( $param, @{$conf->{'lineup'}}[$i], SQL_VARCHAR);
-              $param++;
-            }
+            $sth->bind_param( 1, $id, SQL_VARCHAR );
 
-          $sth->execute();
+            $sth->execute();
 
-          if ($sth->err())
-            {
-              print (STDERR "Unexpected error when executing statement ($sql): " . $sth->errstr . "\n");
-              exit(1)
-            }
+            if ($sth->err())
+              {
+                print (STDERR "Unexpected error when executing statement ($sql): " . $sth->errstr . "\n");
+                exit(1)
+              }
 
-          $sth->bind_col( 1, undef, SQL_VARCHAR );
-          $sth->bind_col( 2, undef, SQL_VARCHAR );
-          $sth->bind_col( 3, undef, SQL_VARCHAR );
-          $sth->bind_col( 4, undef, SQL_VARCHAR );
-          $sth->bind_col( 5, undef, SQL_VARCHAR );
+            $sth->bind_col( 1, undef, SQL_VARCHAR );
+            $sth->bind_col( 2, undef, SQL_VARCHAR );
+            $sth->bind_col( 3, undef, SQL_VARCHAR );
+            $sth->bind_col( 4, undef, SQL_VARCHAR );
+            $sth->bind_col( 5, undef, SQL_VARCHAR );
 
-          while (my $r = $sth->fetchrow_arrayref())
-            {
-              my $sID = $r->[0];
-              my $channum = $r->[1];
-              my $c = $JSON->decode($r->[2]);
-              my $s = $JSON->decode($r->[3]);
-              my $SDtype = $r->[4] || 'Unknown';
-              my $type = mapTransport($r->[4]);
+            while (my $r = $sth->fetchrow_arrayref())
+              {
+                my $sID = $r->[0];
+                my $channum = $r->[1];
+                my $c = $JSON->decode($r->[2]);
+                my $s = $JSON->decode($r->[3]);
+                my $SDtype = $r->[4] || 'Unknown';
+                my $type = mapTransport($r->[4]);
 
-              $w->startTag('lineup-entry');
+                $w->startTag('lineup-entry');
 
-                if (defined($channum) && ($channum ne ''))
-                  {
-                    $w->dataElement('preset', $channum);
-                  }
-
-                $w->startTag('station', 'rfc2838' => generateRFC2838($sID) );
-
-                  my $name = $s->{'name'};
-                  my $shortname = $s->{'callsign'};
-                  $name = $shortname if (!defined($name) || ($name eq ''));
-                  $w->dataElement('name', $name) if (defined($name) && ($name ne ''));
-                  $w->dataElement('short-name', $shortname) if (defined($shortname) && ($shortname ne ''));
-
-                  # get-lineup proposal is not precise, but it appears we
-                  # should only return one logo, so return only the first
-                  if ((defined($s->{'stationLogo'}->[0]->{'URL'})) &&
-                      (!exists($GRABBER_FIXUPS->{'NO_STATION_LOGOS'})))
+                  if (defined($channum) && ($channum ne ''))
                     {
-                      if (defined($s->{'stationLogo'}->[0]->{'width'}) && defined($s->{'stationLogo'}->[0]->{'height'}))
-                        {
-                          $w->emptyTag('logo', 'url' => $s->{'stationLogo'}->[0]->{'URL'},
-                                               'height' => $s->{'stationLogo'}->[0]->{'height'},
-                                               'width' => $s->{'stationLogo'}->[0]->{'width'});
-                        }
-                      else
-                        {
-                          $w->emptyTag('logo', 'url' => $s->{'stationLogo'}->[0]->{'URL'});
-                        }
-
+                      $w->dataElement('preset', $channum);
                     }
+
+                  $w->startTag('station', 'rfc2838' => generateRFC2838($sID) );
+
+                    my $name = $s->{'name'};
+                    my $shortname = $s->{'callsign'};
+                    $name = $shortname if (!defined($name) || ($name eq ''));
+                    $w->dataElement('name', $name) if (defined($name) && ($name ne ''));
+                    $w->dataElement('short-name', $shortname) if (defined($shortname) && ($shortname ne ''));
+
+                    # get-lineup proposal is not precise, but it appears we
+                    # should only return one logo, so return only the first
+                    if ((defined($s->{'stationLogo'}->[0]->{'URL'})) &&
+                        (!exists($GRABBER_FIXUPS->{'NO_STATION_LOGOS'})))
+                      {
+                        if (defined($s->{'stationLogo'}->[0]->{'width'}) && defined($s->{'stationLogo'}->[0]->{'height'}))
+                          {
+                            $w->emptyTag('logo', 'url' => $s->{'stationLogo'}->[0]->{'URL'},
+                                                 'height' => $s->{'stationLogo'}->[0]->{'height'},
+                                                 'width' => $s->{'stationLogo'}->[0]->{'width'});
+                          }
+                        else
+                          {
+                            $w->emptyTag('logo', 'url' => $s->{'stationLogo'}->[0]->{'URL'});
+                          }
+
+                      }
 
                   $w->endTag('station');
 
@@ -4054,31 +4060,32 @@ sub getLineup
                             $w->dataElement('system', 'NTSC-M');
                         }
 
-                        if (defined($channum) && ($channum ne ''))
-                          {
-                            $w->dataElement('number', $channum);
-                          }
+                      if (defined($channum) && ($channum ne ''))
+                        {
+                          $w->dataElement('number', $channum);
+                        }
 
-                        my $fccChan = $c->{'uhfVhf'};
-                        if (defined($fccChan))
-                          {
-                            $w->dataElement('frequency', mapUSATSCChannelToFrequency($fccChan));
-                          }
+                      my $fccChan = $c->{'uhfVhf'};
+                      if (defined($fccChan))
+                        {
+                          $w->dataElement('frequency', mapUSATSCChannelToFrequency($fccChan));
+                        }
 
-                        if ($ATSC)
-                          {
-                            # This will be wrong some of the time, but until
-                            # we get better data, it is what it is (and it
-                            # turns out it is correct a lot of the time)
-                            $w->dataElement('program', $atscMinor);
-                          }
+                      if ($ATSC)
+                        {
+                          # This will be wrong some of the time, but until
+                          # we get better data, it is what it is (and it
+                          # turns out it is correct a lot of the time)
+                          $w->dataElement('program', $atscMinor);
+                        }
 
-                        if (defined($s->{'callsign'}))
-                          {
-                            $w->dataElement('fcc-callsign', $s->{'callsign'});
-                          }
-                        # Needed for xsd compliance, even though it was supposed to be optional for US analog
-                        #$w->emptyTag('cni','tt-8-30-1' => '');
+                      if (defined($s->{'callsign'}))
+                        {
+                          $w->dataElement('fcc-callsign', $s->{'callsign'});
+                        }
+
+                      # Needed for xsd compliance, even though it was supposed to be optional for US analog
+                      $w->emptyTag('cni','tt-8-30-1' => '') if (!$ATSC);
 
                       if ($ATSC)
                         {
@@ -4131,12 +4138,14 @@ sub getLineup
                       $w->endTag('dvb-channel');
                     }
 
-              $w->endTag('lineup-entry');
-            }
-      $w->endTag('xmltv-lineup');
-    }                        # Each lineup in config file.
+                $w->endTag('lineup-entry');
+              }
+
+          $w->endTag('xmltv-lineup');
+        }
 
     $w->endTag('xmltv-lineups');
+
     $w->end();
 
     return(encode('UTF-8', $w->to_string));
