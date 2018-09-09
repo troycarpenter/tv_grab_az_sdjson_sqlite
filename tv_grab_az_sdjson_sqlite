@@ -46,6 +46,7 @@
 #
 # 2017/11/30 - 1.35 - Populate thetvdb episode-num.
 # 2017/10/11 - 1.34 - download artwork.
+# 2018/09/04 - 1.49 - support short-name in getLineup for other types
 # 2018/09/03 - 1.48 - use available channum
 # 2018/09/02 - 1.47 - remove dead code
 # 2018/09/02 - 1.46 - fix grammer
@@ -3988,15 +3989,11 @@ sub getLineup
 
                 $w->startTag('station', 'rfc2838' => generateRFC2838($sID) );
 
-                  $w->dataElement('name', $s->{'name'});
-
-                  if (($SDtype eq 'Cable') || ($SDtype eq 'Antenna'))
-                    {
-                      if (defined($s->{'callsign'}))
-                        {
-                          $w->dataElement('short-name', $s->{'callsign'});
-                        }
-                    }
+                  my $name = $s->{'name'};
+                  my $shortname = $s->{'callsign'};
+                  $name = $shortname if (!defined($name) || ($name eq ''));
+                  $w->dataElement('name', $name) if (defined($name) && ($name ne ''));
+                  $w->dataElement('short-name', $shortname) if (defined($shortname) && ($shortname ne ''));
 
                   # get-lineup proposal is not precise, but it appears we
                   # should only return one logo, so return only the first
