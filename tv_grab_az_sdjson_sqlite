@@ -46,6 +46,17 @@
 #
 # 2017/11/30 - 1.35 - Populate thetvdb episode-num.
 # 2017/10/11 - 1.34 - download artwork.
+# 2018/08/30 - 1.44 - multi-lineup plumbing - getLineup
+# 2018/08/30 - 1.43 - multi-lineup plumbing - SD_isLineupFetchRequired
+# 2018/08/30 - 1.42 - multi-lineup plumbing - lineupValidate
+# 2018/08/30 - 1.41 - multi-lineup plumbing - channelWriter
+# 2018/08/29 - 1.40 - multi-lineup plumbing - SD_cleanLineups
+# 2018/08/29 - 1.39 - multi-lineup plumbing - canonical lineup details
+# 2018/08/25 - 1.38 - remove dead code
+# 2018/08/25 - 1.37 - minor whitespace adjustments
+# 2018/06/17 - 1.36 - handle deleted lineups not having description
+# 2018/02/03 - 1.35 - remove lang from channel display-name
+# 2018/02/03 - 1.34 - remove use warning nonfatal experimental in package
 # 2017/07/21 - 1.33 - dtd compliance.  Only actors can have roles
 # 2017/06/19 - 1.32 - derive category from showtype
 # 2017/04/20 - 1.31 - provide fixup support
@@ -3808,6 +3819,7 @@ sub getLineup
 
     $conf = $conf_xmltv;
     $opt = $opt_xmltv;
+
     configValidate($conf, $opt);
 
     $debug = $opt->{'debug'};
@@ -3841,7 +3853,7 @@ sub getLineup
                  'source-info-url'       => $SD_SITEURL );
 
     #
-    # Collect some lineup information
+    # Collect some lineup information.  We use the first lineup (or only) lineup for details
     #
 
   # Need to output one xmltv lineup section per lineup.
@@ -3886,7 +3898,7 @@ sub getLineup
           # Process each channel/station in the lineup
           #
 
-          $sql = "select channels.station, channels.details, stations.details from channels as channels left join stations as stations on stations.station = channels.station where channels.lineup = ? and channels.selected = 1";
+          $sql = 'select distinct channels.station, channels.details, stations.details, lineups.transport from channels as channels left join stations as stations on stations.station = channels.station left join lineups as lineups on lineups.lineup = channels.lineup where channels.lineup in ( ' . join(', ', ('?') x scalar(@{$conf->{'lineup'}})) . ' ) and channels.selected = 1';
 
           $sth = $DBH->prepare_cached($sql);
           if (!defined($sth))
@@ -3908,12 +3920,15 @@ sub getLineup
           $sth->bind_col( 1, undef, SQL_VARCHAR );
           $sth->bind_col( 2, undef, SQL_VARCHAR );
           $sth->bind_col( 3, undef, SQL_VARCHAR );
+          $sth->bind_col( 4, undef, SQL_VARCHAR );
 
           while (my $r = $sth->fetchrow_arrayref())
             {
               my $sID = $r->[0];
               my $c = $JSON->decode($r->[1]);
               my $s = $JSON->decode($r->[2]);
+              my $SDtype = $r->[3] || 'Unknown';
+              my $type = mapTransport($r->[3]);
 
               $w->startTag('lineup-entry');
 
