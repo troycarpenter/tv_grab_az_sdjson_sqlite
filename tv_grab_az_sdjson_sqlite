@@ -156,7 +156,7 @@ my $SCRIPT_URL                 = 'https://github.com/azlm8t/tv_grab_zz_sdjson_sq
 my $SCRIPT_NAME                = basename("$0");
 my $SCRIPT_NAME_DIR            = dirname("$0");
 
-my $SCRIPT_DB_VERSION          = 3;            # Used for script/db updates (see DB_open_global)
+my $SCRIPT_DB_VERSION          = 4;            # Used for script/db updates (see DB_open_global)
 
 my $SD_DESC                    = 'Schedules Direct';
 my $SD_SITEURL                 = 'https://www.schedulesdirect.org';
@@ -1254,7 +1254,7 @@ for (my $retry = 0; $retry < 7; $retry++)
   }
 
 
-$sql4 = "replace into artwork (program, hash, details) values (?, ?, ?)";
+$sql4 = "replace into artwork (program, hash, details, downloaded) values (?, ?, ?, ?)";
 $sth4 = $DBH->prepare_cached($sql4);
 if (!defined($sth4))
   {
@@ -1339,6 +1339,7 @@ for (my $retry = 0; $retry < 7; $retry++)
             $sth4->bind_param( 1, $pID, SQL_VARCHAR );
             $sth4->bind_param( 2, $hash, SQL_VARCHAR );
             $sth4->bind_param( 3, $details, SQL_VARCHAR );
+            $sth4->bind_param( 4, $nowDateTimeSQLite, SQL_DATETIME );
 
             $sth4->execute();
             if ($sth4->err)
@@ -4943,6 +4944,16 @@ sub DB_open_global
     return $DBH = DB_open_local(dbname => $dbname);
 }
 
+sub exit_if_db_err {
+    my ($db, $rc, $reason) = @_;
+    if ((!defined($rc)) || ($rc < 0)) {
+        $reason = "" unless $reason;
+        print (STDERR "ERROR: $reason: " . $db->errstr . "\n");
+        $db->rollback();
+        exit(1);
+    }
+}
+
 # Open a database and return the handle.
 sub DB_open_local {
     my (%opts) = @_;
@@ -5241,11 +5252,28 @@ sub DB_open_local {
                          "details blob not null) ");
               if ((!defined($rc)) || ($rc < 0))
                 {
-                    print (STDERR "Unable to create schedules table in database $dbname: " . $db->errstr . "\n");
+                    print (STDERR "Unable to create artwork table in database $dbname: " . $db->errstr . "\n");
                     $db->rollback();
                     exit(1);
                 }
 
+              DB_settingsSet($db, 'version', $version);
+              $db->commit();
+          }
+
+        if (3 == $version)
+          {
+              $version = 4;
+              print (STDERR "Updating database to version $version\n") if (!$quiet);
+              $rc = $db->do("alter table artwork add downloaded datetime");
+              exit_if_db_err($db, $rc, "Alter table artwork");
+              $rc = $db->do("update artwork set downloaded = datetime('now') where downloaded is null");
+              exit_if_db_err($db, $rc, "Update download time");
+              $rc = $db->do("create index artwork_index_downloaded on artwork(downloaded)");
+              exit_if_db_err($db, $rc, "Add index to artwork");
+              # Add a couple of indexes that are useful for pruning.
+              $rc = $db->do("create index ssh_index_day on stations_schedules_hash(day)");
+              exit_if_db_err($db, $rc, "Create index on stations_schedules_hash");
               DB_settingsSet($db, 'version', $version);
               $db->commit();
           }
