@@ -183,8 +183,12 @@ channels that never change since it avoids the PVR re-processing them on every r
 * --force-download
 Erase schedules from DB and force a complete download of data.
 * --force-vacuum
-On the first day of the month, the database is vacuumed to reduce clutter and improve performance.
+The database is automatically vacuumed to reduce clutter and improve performance.
 However, a vacuum can be forced with this option.
+* --vacuum-frequency=n
+Delta (in seconds) of how frequently a vacuum should occur.
+Vacuuming can take a long time so is not done frequently.
+Default is once every few months.
 * --content-rating-order=s
 Use a specific content rating order based on rating agency. For example "MPAA,VCHIP" will prefer those to all other rating systems.
 This is useful since many movies have multiple ratings but many systems only take the first content rating.

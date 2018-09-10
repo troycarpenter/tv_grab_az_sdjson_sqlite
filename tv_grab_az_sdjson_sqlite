@@ -301,7 +301,7 @@ my %catmap_minor = (
       description => 'Multinational (Schedules Direct JSON web services with SQLite DB and local segment caching)',
       extra_options => [qw/manage-lineups
                            force-download
-                           force-vacuum
+                           force-vacuum|vacuum-force
                            download-only
                            no-download
                            no-prune
@@ -339,6 +339,7 @@ my %catmap_minor = (
                            cache-force-clear!
                            cache-root-dir=s
                            cache-compression-threshold=n
+                           vacuum-frequency=n
                            benchmark/],
       defaults => { days => 30 },
     }
@@ -5649,8 +5650,29 @@ sub DB_prune
     # Once a month we vacuum the database since over time it can get
     # really slow. The "auto vacuum" only shuffles pages and can make
     # fragmentation worse, so we need a proper vacuum.
-    my $day = DateTime->now->day;
-    if (get_option('force-vacuum') || $day == 1) {
+
+    my $need_vacuum = get_option('force-vacuum');
+    my $vac_setting = 'vacuum-stamp';
+    if (!$need_vacuum) {
+        # Vacuum not forced, so check timestamp of last vacuum.
+        my $now = DateTime->now->epoch;
+        my $vac_date = DB_settingsGet($DBH, $vac_setting);
+        # DB date does not exist (first run?) or DB date in the
+        # future, so is wrong (bad RTC)
+        if (!$vac_date || $vac_date > $now) {
+            # Don't vacuum on first run.
+            DB_settingsSet($DBH, $vac_setting, $now);
+        } else {
+            # How frequently (in seconds) to vacuum? Once every few months seems
+            # fine.
+            my $vac_frequency = get_option('vacuum-frequency') // 60 * 60 * 24 * 90;
+            if ($now - $vac_date > $vac_frequency) {
+                $need_vacuum = 1;
+            }
+        }
+    }
+
+    if ($need_vacuum) {
         print (STDERR "Vacuuming the database\n") unless $quiet;
         $DBH->{'AutoCommit'} = 1;
         $sql = "vacuum";
@@ -5660,6 +5682,7 @@ sub DB_prune
               print (STDERR "Unable to vacuum database: " . $DBH->errstr . "\n");
           }
         $DBH->{'AutoCommit'} = 0;
+        DB_settingsSet($DBH, $vac_setting, DateTime->now->epoch);
     }
 
     #
