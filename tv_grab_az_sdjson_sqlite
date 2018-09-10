@@ -5610,6 +5610,23 @@ sub DB_prune
 
     $DBH->commit();
 
+    $sql = "update artwork set downloaded = ? where downloaded > ?";
+    $sth = $DBH->prepare_cached($sql);
+    if (!defined($sth))
+      {
+        print (STDERR "Unexpected error when preparing statement ($sql): " . $DBH->errstr . "\n");
+        exit(1);
+      }
+    $sth->bind_param( 1, $nowDateTimeSQLite, SQL_DATETIME );
+    $sth->bind_param( 2, $nowDateTimeSQLite, SQL_DATETIME );
+    $sth->execute();
+    if ($sth->err)
+      {
+        print (STDERR "Unable to update artwork with downloaded dates in the future in database: " . $sth->errstr . "\n");
+      }
+
+    $DBH->commit();
+
     #
     # Because the database may not have the needed configuration
     # for incremental vacuum, we issue the command, but do not
