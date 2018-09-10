@@ -5466,49 +5466,52 @@ sub DB_prune
     if ($sth->err)
       {
         print (STDERR "Unable to prune schedules_hash for past and far future dates in database: " . $sth->errstr . "\n");
-      }
+    }
 
-    # Delete schedules_hash which have no matching schedules
-    $sql = "delete from schedules_hash where not exists (select * from schedules as schedules where schedules.station = schedules_hash.station and schedules.day = schedules_hash.day)";
-    $sth = $DBH->prepare_cached($sql);
-    if (!defined($sth))
-      {
-        print (STDERR "Unexpected error when preparing statement ($sql): " . $DBH->errstr . "\n");
-        exit(1);
-      }
-    $sth->execute();
-    if ($sth->err)
-      {
-        print (STDERR "Unable to prune schedules_hash which have no matching schedule in database: " . $sth->errstr . "\n");
-      }
+    # We now leave these in the schedules_hash and just let them expire once the day passes.
+    # This is to avoid runtime every day processing them.
 
-    # Delete schedules for which there is no schedules_hash
-    $sql = "delete from schedules where not exists (select * from schedules_hash as schedules_hash where schedules.station = schedules_hash.station and schedules.day = schedules_hash.day)";
-    $sth = $DBH->prepare_cached($sql);
-    if (!defined($sth))
-      {
-        print (STDERR "Unexpected error when preparing statement ($sql): " . $DBH->errstr . "\n");
-        exit(1);
-      }
-    $sth->execute();
-    if ($sth->err)
-      {
-        print (STDERR "Unable to prune schedules for unmatched schedule hashes in database: " . $sth->errstr . "\n");
-      }
+    # # Delete schedules_hash which have no matching schedules
+    # $sql = "delete from schedules_hash where not exists (select * from schedules as schedules where schedules.station = schedules_hash.station and schedules.day = schedules_hash.day)";
+    # $sth = $DBH->prepare_cached($sql);
+    # if (!defined($sth))
+    #   {
+    #     print (STDERR "Unexpected error when preparing statement ($sql): " . $DBH->errstr . "\n");
+    #     exit(1);
+    #   }
+    # $sth->execute();
+    # if ($sth->err)
+    #   {
+    #     print (STDERR "Unable to prune schedules_hash which have no matching schedule in database: " . $sth->errstr . "\n");
+    #   }
 
-    # Delete stations_schedules_hash no longer referenced by our stations
-    $sql = "delete from stations_schedules_hash where station not in (select distinct channels.station from channels as channels)";
-    $sth = $DBH->prepare_cached($sql);
-    if (!defined($sth))
-      {
-        print (STDERR "Unexpected error when preparing statement ($sql): " . $DBH->errstr . "\n");
-        exit(1);
-      }
-    $sth->execute();
-    if ($sth->err)
-      {
-        print (STDERR "Unable to prune stations_schedules_hash in database: " . $sth->errstr . "\n");
-      }
+    # # Delete schedules for which there is no schedules_hash
+    # $sql = "delete from schedules where not exists (select * from schedules_hash as schedules_hash where schedules.station = schedules_hash.station and schedules.day = schedules_hash.day)";
+    # $sth = $DBH->prepare_cached($sql);
+    # if (!defined($sth))
+    #   {
+    #     print (STDERR "Unexpected error when preparing statement ($sql): " . $DBH->errstr . "\n");
+    #     exit(1);
+    #   }
+    # $sth->execute();
+    # if ($sth->err)
+    #   {
+    #     print (STDERR "Unable to prune schedules for unmatched schedule hashes in database: " . $sth->errstr . "\n");
+    #   }
+
+    # # Delete stations_schedules_hash no longer referenced by our stations
+    # $sql = "delete from stations_schedules_hash where station not in (select distinct channels.station from channels as channels)";
+    # $sth = $DBH->prepare_cached($sql);
+    # if (!defined($sth))
+    #   {
+    #     print (STDERR "Unexpected error when preparing statement ($sql): " . $DBH->errstr . "\n");
+    #     exit(1);
+    #   }
+    # $sth->execute();
+    # if ($sth->err)
+    #   {
+    #     print (STDERR "Unable to prune stations_schedules_hash in database: " . $sth->errstr . "\n");
+    #   }
 
     # Delete stations_schedules_hash which have "expired"
     $sql = "delete from stations_schedules_hash where day < ? OR day > ?";
