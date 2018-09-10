@@ -5576,14 +5576,14 @@ sub DB_prune
       }
 
     # Delete artwork no longer referenced
-    $sql = "delete from artwork where program not in (select distinct schedules.program from schedules as schedules) and program not in (select distinct p2.program_supplemental from programs as p2 where p2.program_supplemental is not null)";
+    $sql = "delete from artwork where downloaded < ? and program not in (select distinct schedules.program from schedules as schedules) and program not in (select distinct p2.program_supplemental from programs as p2 where p2.program_supplemental is not null)";
     $sth = $DBH->prepare_cached($sql);
     if (!defined($sth))
       {
         print (STDERR "Unexpected error when preparing statement ($sql): " . $DBH->errstr . "\n");
         exit(1);
       }
-    $sth->execute();
+    $sth->execute($lazyPruneDownloadDate);
     if ($sth->err)
       {
         print (STDERR "Unable to prune artwork no longer referenced in database: " . $sth->errstr . "\n");
