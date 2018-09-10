@@ -5465,7 +5465,8 @@ sub DB_prune
       }
 
     # Delete schedules no longer referenced by our stations
-    $sql = "delete from schedules where day < ? or day > ? or station not in (select distinct stations.station from stations as stations)";
+    # We now lazily only delete them once their day elapses to avoid runtime.
+    $sql = "delete from schedules where day < ? or day > ?"; # or station not in (select distinct stations.station from stations as stations)";
     $sth = $DBH->prepare_cached($sql);
     if (!defined($sth))
       {
@@ -5481,7 +5482,8 @@ sub DB_prune
       }
 
     # Delete schedules_hash no longer referenced by our stations
-    $sql = "delete from schedules_hash where day < ? or day > ? or station not in (select stations.station from stations as stations)";
+    # We now lazily only delete them once their day elapses to avoid runtime.
+    $sql = "delete from schedules_hash where day < ? or day > ?"; #  or station not in (select stations.station from stations as stations)";
     $sth = $DBH->prepare_cached($sql);
     if (!defined($sth))
       {
