@@ -5375,6 +5375,8 @@ sub DB_prune
 
     my $expireBeforeDateTime = DateTime->now(time_zone => 'UTC')->subtract(days => 1);
     my $expireAfterDateTime = DateTime->now(time_zone => 'UTC')->add(days => 30);
+    # Ignore records downloaded after this when doing lazy pruning.
+    my $lazyPruneDownloadDate = DateTime->now(time_zone => 'UTC')->subtract(days => 14);
 
     # Update any lineups where the downloaded datetime is in the future (bad rtc?)
     $sql = "update lineups set downloaded = '1970-01-01 00:00:00' where downloaded > ?";
@@ -5465,7 +5467,7 @@ sub DB_prune
       }
 
     # Delete schedules_hash no longer referenced by our stations
-    $sql = "delete from schedules_hash where station not in (select distinct stations.station from stations as stations)";
+    $sql = "delete from schedules_hash where station not in (select stations.station from stations as stations)";
     $sth = $DBH->prepare_cached($sql);
     if (!defined($sth))
       {
@@ -5553,14 +5555,18 @@ sub DB_prune
       }
 
     # Delete programs no longer referenced by a schedule and are not supplemental
-    $sql = "delete from programs where program not in (select distinct schedules.program from schedules as schedules) and program not in (select distinct p2.program_supplemental from programs as p2 where p2.program_supplemental is not null)";
+    # We now do a "lazy delete" and only expire programmes earlier than a timestamp.
+    # This is to reduce runtime since pruning programs takes a very long time.
+    # So we assume if it recently downloaded then we can leave it (the SQL
+    # for generating tv schedules won't use programmes not in schedules anyway).
+    $sql = "delete from programs where downloaded < ? and program not in (select distinct schedules.program from schedules as schedules) and program not in (select distinct p2.program_supplemental from programs as p2 where p2.program_supplemental is not null)";
     $sth = $DBH->prepare_cached($sql);
     if (!defined($sth))
       {
         print (STDERR "Unexpected error when preparing statement ($sql): " . $DBH->errstr . "\n");
         exit(1);
       }
-    $sth->execute();
+    $sth->execute($lazyPruneDownloadDate);
     if ($sth->err)
       {
         print (STDERR "Unable to prune programs no longer referenced in database: " . $sth->errstr . "\n");
