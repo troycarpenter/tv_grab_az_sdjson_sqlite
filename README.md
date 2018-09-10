@@ -177,6 +177,9 @@ For example: --channel-short-days=3 --channel-short-days-exclude-regex="BBC|Movi
 Do not download the schedule, use database cache only.
 * --no-prune
 Do not prune the database of old schedules. Useful if running multiple times.
+* --no-channel-output
+Do not output the channels information in the xmltv file. This can be useful if you have hundreds of
+channels that never change since it avoids the PVR re-processing them on every run.
 * --force-download
 Erase schedules from DB and force a complete download of data.
 * --content-rating-order=s
