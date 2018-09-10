@@ -301,6 +301,7 @@ my %catmap_minor = (
       description => 'Multinational (Schedules Direct JSON web services with SQLite DB and local segment caching)',
       extra_options => [qw/manage-lineups
                            force-download
+                           force-vacuum
                            download-only
                            no-download
                            no-prune
@@ -5645,14 +5646,21 @@ sub DB_prune
     # handle the low hanging fruit, and users can choose
     # to perform a full vacuum as desired
     #
-    #$DBH->{'AutoCommit'} = 1;
-    #$sql = "vacuum";
-    #$rc = $DBH->do($sql);
-    #if ((!defined($rc)) || ($rc < 0))
-    #  {
-    #    print (STDERR "Unable to prune programs in database: " . $DBH->errstr . "\n");
-    #  }
-    #$DBH->{'AutoCommit'} = 0;
+    # Once a month we vacuum the database since over time it can get
+    # really slow. The "auto vacuum" only shuffles pages and can make
+    # fragmentation worse, so we need a proper vacuum.
+    my $day = DateTime->now->day;
+    if (get_option('force-vacuum') || $day == 1) {
+        print (STDERR "Vacuuming the database\n") unless $quiet;
+        $DBH->{'AutoCommit'} = 1;
+        $sql = "vacuum";
+        $rc = $DBH->do($sql);
+        if ((!defined($rc)) || ($rc < 0))
+          {
+              print (STDERR "Unable to vacuum database: " . $DBH->errstr . "\n");
+          }
+        $DBH->{'AutoCommit'} = 0;
+    }
 
     #
     # In many (real world) runs, substantive data has been

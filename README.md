@@ -182,6 +182,9 @@ Do not output the channels information in the xmltv file. This can be useful if 
 channels that never change since it avoids the PVR re-processing them on every run.
 * --force-download
 Erase schedules from DB and force a complete download of data.
+* --force-vacuum
+On the first day of the month, the database is vacuumed to reduce clutter and improve performance.
+However, a vacuum can be forced with this option.
 * --content-rating-order=s
 Use a specific content rating order based on rating agency. For example "MPAA,VCHIP" will prefer those to all other rating systems.
 This is useful since many movies have multiple ratings but many systems only take the first content rating.
