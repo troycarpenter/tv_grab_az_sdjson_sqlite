@@ -5437,21 +5437,7 @@ sub DB_prune
       }
 
     # Delete schedules no longer referenced by our stations
-    $sql = "delete from schedules where station not in (select distinct stations.station from stations as stations)";
-    $sth = $DBH->prepare_cached($sql);
-    if (!defined($sth))
-      {
-        print (STDERR "Unexpected error when preparing statement ($sql): " . $DBH->errstr . "\n");
-        exit(1);
-      }
-    $sth->execute();
-    if ($sth->err)
-      {
-        print (STDERR "Unable to prune schedules no longer associated with stations in database: " . $sth->errstr . "\n");
-      }
-
-    # Delete schedules which have "expired"
-    $sql = "delete from schedules where day < ? OR day > ?";
+    $sql = "delete from schedules where day < ? or day > ? or station not in (select distinct stations.station from stations as stations)";
     $sth = $DBH->prepare_cached($sql);
     if (!defined($sth))
       {
@@ -5467,21 +5453,7 @@ sub DB_prune
       }
 
     # Delete schedules_hash no longer referenced by our stations
-    $sql = "delete from schedules_hash where station not in (select stations.station from stations as stations)";
-    $sth = $DBH->prepare_cached($sql);
-    if (!defined($sth))
-      {
-        print (STDERR "Unexpected error when preparing statement ($sql): " . $DBH->errstr . "\n");
-        exit(1);
-      }
-    $sth->execute();
-    if ($sth->err)
-      {
-        print (STDERR "Unable to prune schedules_hash not associated with a station in database: " . $sth->errstr . "\n");
-      }
-
-    # Delete schedules_hash which have "expired"
-    $sql = "delete from schedules_hash where day < ? OR day > ?";
+    $sql = "delete from schedules_hash where day < ? or day > ? or station not in (select stations.station from stations as stations)";
     $sth = $DBH->prepare_cached($sql);
     if (!defined($sth))
       {
