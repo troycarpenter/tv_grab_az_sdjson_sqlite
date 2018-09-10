@@ -326,6 +326,7 @@ my %catmap_minor = (
                            update-description-with-advisory!
                            update-description-with-artwork!
                            update-description-with-stars!
+                           update-description-with-stars-color|update-description-with-stars-colour=s
                            update-description-with-rating!
                            update-description-with-title!
                            update-previously-shown-with-year!
@@ -2261,7 +2262,9 @@ sub get_desc {
             my $max = $quality->{'maxRating'};
             my $rating = $quality->{'rating'};
             if ($max == 4 && $min == 1) {
-                $stars = "\N{WHITE STAR}" x $rating;
+                my $color = get_option('update-description-with-stars-color') // "white";
+                my $star_char = $color =~ /white/i ? "\N{WHITE STAR}" : "\N{BLACK STAR}";
+                $stars = $star_char x $rating;
                 $stars .= "\N{VULGAR FRACTION ONE HALF}" if ($rating - int($rating) > 0);
                 last;
             }

@@ -230,6 +230,9 @@ Add content advisories (such as adult language) to description.
 Some clients allow artwork to be embedded in the description using html image URLs. This option enables this.
 * --update-description-with-stars
 Add star rating to description.
+* --update-description-with-stars-color=s
+Specify the color for the stars, either "white" or "black".
+Default is "white" which uses an outline star (unicode U+2606). The alternative is "black" which uses a filled star (unicode U+2605).
 * --update-description-with-rating
 Add programme age rating in to description. For example "TV-PG".
 * --update-description-with-title
