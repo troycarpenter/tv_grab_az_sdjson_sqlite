@@ -1,0 +1,21 @@
+User-visible and notable changes. For new options, see the README.md.
+
+* 201809
+- Database is automatically vacuumed every few months to improve performance.
+- Database version upgraded. This allows us to lazily expire records, improving run time.
+- Records are more lazily deleted from the database, reducing run time.
+- New option "--no-channel-output" to avoid writing channel data to xmltv, saving PVR processing time.
+- Support for caching generated data in Redis or files to improve run time. See README.md.
+- New option "--cache-ignore-unchanged-programmes" to improve PVR processing time.
+- Multiple lineups allowed in a single configuration file.
+- New options "--channel-short-days-exclude-regex" and "--channel-short-days" to allow uninteresting channels to have shorter guide information, reducing PVR memory usage.
+- New option "--benchmark" to log timing information for users.
+
+* 201802
+- New option "--update-description-with-all" (and others, see README.md) to put extra cast and rating information in the description. Useful for PVRs that don't display season/episode/rating information.
+- Artwork downloaded for programmes.
+
+* 201712
+- New option "--merge-split" to merge programmes split by news. This avoids PVRs only recording the first half of programmes.
+- Mark programmes as premiere. Note that some channels may mark the same episode as premiere multiple times, such as daytime and evening.
+- Prefer tvdb season/episode numbers if available.

@@ -92,6 +92,15 @@ fetching multiple days of listings.  To enable this you will need the
 Perl module "CHI" and "CHI::Driver::Redis" and a working Redis server
 running locally.
 
+Caching can also allow the xmltv file to only contain changes,
+rather than a complete listing via --cache-ignore-unchanged-programmes.
+So, by default, SD can have several week's of data and an xmltv file
+will say "news is on at 8pm on 1st April", and on the following day's
+run it will say again "news is on at 8pm on 1st April", and so on for
+several weeks. With --cache-ignore-unchanged-programmes, the xmltv file
+will only contain the item once. This avoids the PVR needing to process
+the same information repeatedly every day.
+
 The cache can then be used via the extra arguments:
 "--cache-driver=Redis"
 
