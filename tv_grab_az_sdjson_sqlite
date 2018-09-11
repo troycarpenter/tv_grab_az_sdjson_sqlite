@@ -624,6 +624,9 @@ else
             foreach my $day(keys %{$r->{$station}})
               {
                 my $s = $r->{$station}->{$day};
+                # If we have an error code (non-zero) then ignore this hash.
+                # We get SD error 7030 when there are lineup issues.
+                next if $s->{code};
                 my $hash = $s->{'md5'} || '';
                 my $details = $JSON->utf8->encode($s);
                 $sth->bind_param( 1, $station, SQL_VARCHAR );
