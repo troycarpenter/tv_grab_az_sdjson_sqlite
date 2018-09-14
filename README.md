@@ -320,8 +320,9 @@ on all the other channels such as shopping.
 
 For mythtv/mythweb, I like to have artwork injected in the description.
 
-I use File caching backend since I have a reasonably fast filesystem
-backed by SSD and it seems a bit faster than Redis on my system.
+I used to use File caching backend since I have a reasonably fast filesystem
+backed by SSD and it seems a bit faster than Redis on my system. However,
+I now use Redis since it performs purging faster than File.
 
 So I have a script that is run via crontab. It is similar to:
 
@@ -331,7 +332,7 @@ So I have a script that is run via crontab. It is similar to:
 # Interesting channels have this text in their name (separated by pipe symbol)
 CHREGEX="BBC|Movie|Film|Sony"
 
-COMMONARGS="--config-file sd.conf --merge-split=5 --artwork-max-width=720 --update-description-with-all --update-description-with-artwork --update-previously-shown-with-year --cache-driver=File --cache-purge-expired --cache-ignore-unchanged-programmes --benchmark --cache-ignore-unchanged-programmes"
+COMMONARGS="--config-file sd.conf --merge-split=5 --artwork-max-width=720 --update-description-with-all --update-description-with-artwork --update-previously-shown-with-year --cache-driver=Redis --cache-ignore-unchanged-programmes --benchmark --cache-ignore-unchanged-programmes --no-channel-output"
 tv_grab_az_sdjson_sqlite --output out.xml --days 10 --channel-short-days=3 --channel-short-days-exclude-regex="$CHREGEX" $COMMONARGS
 mythfilldatabase --file --xmlfile out.xml --sourceid 1
 ```
