@@ -1568,10 +1568,14 @@ exit(0);
 sub get_old_artwork_to_redownload {
     local $DBH->{RaiseError} = 1;
     my $LIMIT = 100;
-    my $sql = "select program from artwork where downloaded < ? order by downloaded limit $LIMIT";
+    my $sql = "select program from artwork where downloaded < ? or (downloaded < ? and hash = 0) order by downloaded limit $LIMIT";
+    # Re-download old artwork.
     my $earliest_artwork_date = DateTime->now->subtract(days => 90);
+    # And retry failed to download artwork more frequently.
+    my $earliest_artwork_date_for_failed = DateTime->now->subtract(days => 7);
     my $oldArtworkList = $DBH->selectcol_arrayref($sql, { MaxRows => $LIMIT },
-                                                  DateTime::Format::SQLite->format_datetime($earliest_artwork_date, SQL_DATETIME));
+                                                  DateTime::Format::SQLite->format_datetime($earliest_artwork_date, SQL_DATETIME),
+                                                  DateTime::Format::SQLite->format_datetime($earliest_artwork_date_for_failed, SQL_DATETIME));
     return $oldArtworkList;
 }
 

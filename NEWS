@@ -10,7 +10,7 @@ User-visible and notable changes. For new options, see the README.md.
 - Multiple lineups allowed in a single configuration file.
 - New options "--channel-short-days-exclude-regex" and "--channel-short-days" to allow uninteresting channels to have shorter guide information, reducing PVR memory usage.
 - New option "--benchmark" to log timing information for users.
-- Artwork for long running shows is automatically periodically refreshed.
+- Artwork for long running shows and artwork that failed to download is automatically periodically refreshed.
 
 * 201802
 - New option "--update-description-with-all" (and others, see README.md) to put extra cast and rating information in the description. Useful for PVRs that don't display season/episode/rating information.
