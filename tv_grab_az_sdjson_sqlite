@@ -1092,7 +1092,7 @@ for (my $retry = 0; $retry < 7; $retry++)
                 print (STDERR "Unexpected error when executing statement ($sql1): " . $sth1->errstr . "\n");
                 exit(1);
               }
-            $artworkProgram{$pID} = 1 if ($program->{'hasImageArtwork'});
+            $artworkProgram{$pID} = 1 if $program->{hasImageArtwork} || $program->{hasSeriesArtwork} || $program->{hasEpisodeArtwork} || $program->{hasMovieArtwork} || $program->{hasSportsArtwork};
           }
         $DBH->commit();
       }
@@ -1251,7 +1251,7 @@ for (my $retry = 0; $retry < 7; $retry++)
                 exit(1);
               }
 
-            $artworkProgram{$pID} = 1 if ($program->{'hasImageArtwork'});
+            $artworkProgram{$pID} = 1 if $program->{hasImageArtwork} || $program->{hasSeriesArtwork} || $program->{hasEpisodeArtwork} || $program->{hasMovieArtwork} || $program->{hasSportsArtwork};
           }
         $DBH->commit();
       }
