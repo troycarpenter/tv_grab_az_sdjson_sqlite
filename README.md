@@ -51,10 +51,6 @@ Categories: Episode, Series, Show, Sitcom.
 Support for Multiple Lineups
 ----------------------------
 
-This is an experimental feature. That means the options may change or
-be removed in future releases and the generated output has not been
-rigorously tested.
-
 Some countries require multiple SD channel lineups to populate all the
 channels that can be received by one tuner.
 
@@ -101,28 +97,33 @@ several weeks. With --cache-ignore-unchanged-programmes, the xmltv file
 will only contain the item once. This avoids the PVR needing to process
 the same information repeatedly every day.
 
-The cache can then be used via the extra arguments:
+The cache can be used via the extra arguments:
 "--cache-driver=Redis"
 
 Other Perl CHI drivers can be used, but are not rigorously tested
 such as:
 "--cache-driver=File"
 
-The first time the programme is run, the formatted output is cached.
+The first time the programme is run, the formatted output is cached,
+so the run takes longer than normal as this information is saved.
 On the second and subsequent runs, the cache is checked, and if the
-formatted output is cached, then it is retrieved.
+formatted output is already cached, then it is retrieved.
 
 With multiple days and hundreds of channels, this can significantly
-reduce overhead. On my test system, it reduced the run time from 134
-seconds to 14 seconds.
+reduce overhead.
 
 To check that redis caching is occurring, you can use "redis-cli --stat"
 to monitor keys/memory usage of the redis server. The server
 must have enough space to hold the cached data (maxmemory setting
-in the redis server's redis.conf).
+in the redis server's redis.conf). Since the server only uses as
+much memory as it needs, it can be useful to set it to a high value
+such as "maxmemory 1gb", and then monitor how much memory is actually
+used over the course of a week.
 
 File caching is an alternative to redis and can be used if you have a
-fast filesystem.
+fast filesystem.  Since file system does not natively support purging,
+it is recommended to also add the purge option. This is selected via
+"--cache-driver=File --cache-purge-expired".
 
 * --cache-driver
 Currently only "Redis" is tested and needs the extra Perl modules
