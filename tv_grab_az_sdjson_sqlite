@@ -1341,8 +1341,9 @@ for (my $retry = 0; $retry < 7; $retry++)
               }
             my $details = $JSON->utf8->encode($artwork);
             # Artwork currently has no hash, but we persist one for consistency.
-            # In the future perhaps we persist the hash from the program.
-            my $hash = $artwork->{'md5'} || md5_hex($details);
+            # For entries with an error code, we use a hash of zero so we can
+            # search for them easier for re-downloading.
+            my $hash = $code ? "0" : $artwork->{'md5'} || md5_hex($details);
             $sth4->bind_param( 1, $pID, SQL_VARCHAR );
             $sth4->bind_param( 2, $hash, SQL_VARCHAR );
             $sth4->bind_param( 3, $details, SQL_VARCHAR );
