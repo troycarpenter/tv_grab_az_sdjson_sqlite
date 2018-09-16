@@ -1261,6 +1261,12 @@ for (my $retry = 0; $retry < 7; $retry++)
   }
 
 
+# We also refresh (re-download) old artwork so that long running shows
+# get newer artwork.
+my $oldArtworkList = get_old_artwork_to_redownload();
+print (STDERR "   will also refresh " . scalar @{$oldArtworkList} . " old artwork\n") if !$quiet && scalar @{$oldArtworkList};
+$artworkProgram{$_} = 1 for @{$oldArtworkList};
+
 $sql4 = "replace into artwork (program, hash, details, downloaded) values (?, ?, ?, ?)";
 $sth4 = $DBH->prepare_cached($sql4);
 if (!defined($sth4))
@@ -1556,6 +1562,18 @@ if (get_option('cache-purge-expired') && is_cache_enabled()) {
 }
 exit(0);
 
+
+# Fetch oldest artwork IDs from the database to allow it to be
+# refreshed.  Artwork must be older than a certain timeframe.
+sub get_old_artwork_to_redownload {
+    local $DBH->{RaiseError} = 1;
+    my $LIMIT = 100;
+    my $sql = "select program from artwork where downloaded < ? order by downloaded limit $LIMIT";
+    my $earliest_artwork_date = DateTime->now->subtract(days => 90);
+    my $oldArtworkList = $DBH->selectcol_arrayref($sql, { MaxRows => $LIMIT },
+                                                  DateTime::Format::SQLite->format_datetime($earliest_artwork_date, SQL_DATETIME));
+    return $oldArtworkList;
+}
 
 sub cache_clear {
     my ($t_clearstart);
