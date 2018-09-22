@@ -214,7 +214,7 @@ some frontends do not display programme year, age rating, season, episode,
 star rating, or other information in some views.
 
 * --update-description-with-all
-Enable all the below "update-description-with-" options except for --update-description-with-icons, --update-description-with-icons-basic, --update-description-with-icons-entity and --update-description-with-artwork.
+Enable all the below "update-description-with-" options except for --update-description-with-title, --update-description-with-icons, --update-description-with-icons-basic, --update-description-with-icons-entity and --update-description-with-artwork.
 * --update-description-with-credits
 Add credits (actors) to description.
 * --update-description-with-categories
@@ -248,6 +248,7 @@ Add programme age rating in to description. For example "TV-PG".
 * --update-description-with-title
 Include title details inside the description. So the description will include "ProgTitle - S01E02 - Subtitle".
 This is useful for easier recording regex in some programs.
+This is not included in --update-description-with-all since many UIs do show season/episode information in their UI.
 * --update-previously-shown-with-year
 Movies often have details of the year they were made but some clients expect those details in the previously-shown field.
 * --benchmark
