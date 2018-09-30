@@ -2648,6 +2648,8 @@ sub get_season_episode {
             $max_season_num = $showTotalSeasons;
         }
         $part = generateXMLTV_NS($showingPart, $showingTotalParts);
+        # We sometimes get data such as season 4 of 3. So fix up max season here.
+        $max_season_num = $season_num if $season_num && $max_season_num && $season_num > $max_season_num;
         return ($season_num, $episode_num, $max_season_num, $max_episode_num, $season, $episode, $part, $thetvdbSeriesID, $thetvdbEpisodeID);
 }
 
