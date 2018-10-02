@@ -133,10 +133,15 @@ class Tv_meta_az_sd(object):
         raise RuntimeError("Need a programid");
 
     # Tvheadend returns programid such as "ddprogid://xmltv/MV00000000.0000"
-    #so need to just take the bit after the last slash.
-    programid = programid.split('/')[-1]
+    # so need to just take the bit after the last slash. However, we want
+    # to exclude "crid://" scheme (TVheadend OTA), and not specifically hard-code
+    # the ddprogid:// schema, so we check programid is a recognized format
+    sd_programid = programid.split('/')[-1]
+    if programid.startswith("crid://") or (not sd_programid.startswith("EP") and not sd_programid.startswith("SH") and not sd_programid.startswith("MV") and not sd_programid.startswith("SP")):
+        logging.error("We only handle SchedulesDirect programids not %s" % programid)
+        raise RuntimeError("The programid format is not supported %s" % programid)
 
-    res = self._fetch_from_sd(programid)
+    res = self._fetch_from_sd(sd_programid)
     # Got a dict like {u'programID': u'MV000000000000', u'data': [{u'category
     poster = None
     fanart = self._artwork_from_dict(res)
