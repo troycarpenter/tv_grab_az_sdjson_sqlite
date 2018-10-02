@@ -41,33 +41,18 @@ class Tv_meta_az_sd(object):
       if self.database is None:
         self.database = os.path.join(os.path.expanduser("~"), ".xmltv", "SchedulesDirect.DB")
 
-  def image_url(self, uri):
+  def _image_url(self, uri):
     if uri is None: return uri
     if not uri.startswith("http"): uri = 'https://json.schedulesdirect.org/20141201/image/' + uri
     return uri
 
-  def get_image_url(self, img):
-    """Try and get a reasonable size poster image"""
-    # Start with small sizes since posters are normally displayed in
-    # small boxes so no point loading big images.
-    if not img:
-        return None
-    for size in ('w342', 'w500', 'w780', 'original'):
-        try:
-            ret = img.geturl(size)
-            return ret
-        except:
-            pass
-    # Failed to get a standard size, so return any size
-    return img.geturl()
-
-  def fetch_from_sd(self, programid):
+  def _fetch_from_sd(self, programid):
     # For episodes, fan artwork is generally better on the show.
     # So we try the show first.
     if programid.startswith("EP"):
         showid = "SH" + programid[2:10] + "0000"
         logging.info("For episode %s trying show %s first" % (programid, showid))
-        ret = self.fetch_from_sd(showid)
+        ret = self._fetch_from_sd(showid)
         if ret is not None:
             return ret
 
@@ -94,7 +79,7 @@ class Tv_meta_az_sd(object):
 
     return None
 
-  def artwork_from_dict(self, art):
+  def _artwork_from_dict(self, art):
     if art is None:
         return
     uri = None
@@ -106,7 +91,7 @@ class Tv_meta_az_sd(object):
         # With have an exception loop since some images are missing size.
         try:
             logging.debug("Trying %s" % details)
-            logging.debug("URL %s %s %s "% (self.image_url(details["uri"]), details["category"], details["width"])) # , details["caption"]))
+            logging.debug("URL %s %s %s "% (self._image_url(details["uri"]), details["category"], details["width"])) # , details["caption"]))
             size = details["size"]
             if (size != 'Ms' and size != 'Lg'):
                 continue
@@ -133,10 +118,10 @@ class Tv_meta_az_sd(object):
         except Exception as e:
             logging.debug("Got exception %s during loop" % e)
 
-    logging.info("Finished loop with uri: %s fallback_uri: %s" %(self.image_url(uri), self.image_url(fallback_uri)))
+    logging.info("Finished loop with uri: %s fallback_uri: %s" %(self._image_url(uri), self._image_url(fallback_uri)))
     if uri is None: uri = fallback_uri
     if uri:
-        return self.image_url(uri);
+        return self._image_url(uri);
     else:
         return None
 
@@ -151,10 +136,10 @@ class Tv_meta_az_sd(object):
     #so need to just take the bit after the last slash.
     programid = programid.split('/')[-1]
 
-    res = self.fetch_from_sd(programid)
+    res = self._fetch_from_sd(programid)
     # Got a dict like {u'programID': u'MV000000000000', u'data': [{u'category
     poster = None
-    fanart = self.artwork_from_dict(res)
+    fanart = self._artwork_from_dict(res)
 
     logging.debug(fanart)
 
