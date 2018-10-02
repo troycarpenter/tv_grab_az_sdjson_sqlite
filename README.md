@@ -1,6 +1,7 @@
 # tv_grab_az_sdjson_sqlite / tv_meta_az_sd.py
-XMLTV grabber for Schedules Direct JSON service with local caching of xmltv output.
-Plus Tvheadend metadata program for populating fanart for Kodi.
+XMLTV grabber for Schedules Direct JSON service, optimized for large numbers
+of channels, with local fast caching of xmltv output.
+Also includes a Tvheadend metadata program for populating fanart for Kodi.
 
 Overview
 --------
@@ -11,10 +12,10 @@ Tvheadend and MythTV).
 
 The tv_meta_az_sd.py integrates with "tvhmeta" in Tvheaded 4.3+ to
 provide additional fanart for Kodi 18+. It needs to be put in the same
-directory as Tvheadend's "tvhmeta" program, and the Tvheadend
-recording pre-processor command needs to be changed to
-`tvhmeta --uuid %U` and the program will be loaded by
-tvhmeta and called with the correct configuration.
+directory as Tvheadend's "tvhmeta" program. The "fanart" checkbox
+in the Configuration->Recording->(expert) then needs to be ticked.
+The Tvheadend server with then call tv_meta_az_sd.py at the approriate
+time to populate fanart.
 
 You need a SchedulesDirect account for these programs to work.
 Information from SchedulesDirect is stored in a local SQLite database.
