@@ -63,6 +63,10 @@ class Tv_meta_az_sd(object):
 
     import sqlite3
     import json
+    if not os.path.exists (self.database) or os.path.getsize(self.database) == 0:
+        msg = "Database file {} is not valid (running as incorrect user?)".format(self.database)
+        logging.error(msg)
+        raise RuntimeError(msg)
     logging.debug("Opening database %s" % self.database)
     conn = sqlite3.connect(self.database)
     c = conn.cursor()
