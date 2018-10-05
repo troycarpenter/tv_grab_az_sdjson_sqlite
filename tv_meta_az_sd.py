@@ -3,8 +3,13 @@
 # This program is in python (not perl) so it can integrate
 # nicer with the Tvheadend metadata fetcher (tvhmeta).
 #
-# It only fetches fanart since poster artwork is already
-# output in to the xmltv files and parsed by PVRs.
+# Usage:
+# If using with Tvheadend (4.3+) then all you need to do
+# is put this program in the same directory as the Tvheadend's
+# file "tvhmeta", possibly /usr/bin or /usr/local/bin.
+#
+# There is no need to run the program manually since it is
+# automatically called by Tvheadend.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -79,7 +84,7 @@ class Tv_meta_az_sd(object):
 
     return None
 
-  def _artwork_from_dict(self, art):
+  def _artwork_from_dict(self, art, required_aspect):
     if art is None:
         return
     uri = None
@@ -95,7 +100,7 @@ class Tv_meta_az_sd(object):
     for required_size in ['Ms', 'Lg']:
       if uri:
           break
-      logging.debug("Trying URLs with size %s" % required_size)
+      logging.debug("Trying URLs with size %s and aspect %s" % (required_size, required_aspect))
       for details in reversed(art["data"]):
         # Each entry is similar to {u'category': u'Banner-L1', u'width': u'1920', u'size': u'Ms', u'aspect': u'16x9', u'tier': u'Series', u'text': u'yes', u'height': u'1080', u'uri': u'https://....', u'primary': u'true'}
         # With have an exception loop since some images are missing size.
@@ -103,13 +108,14 @@ class Tv_meta_az_sd(object):
             size = details["size"]
             if (size != required_size):
                 continue
+            text = details["text"]
             logging.debug("Trying %s" % details)
-            logging.debug("URL %s %s %sx%s (%s/%s)"% (self._image_url(details["uri"]), details["category"], details["width"], details["height"], details["size"], details["aspect"])) # , details["caption"]))
+            logging.debug("URL %s %s %sx%s (%s/%s) text: %s"% (self._image_url(details["uri"]), details["category"], details["width"], details["height"], details["size"], details["aspect"], text)) # , details["caption"]))
             category = details["category"]
             aspect = details["aspect"]
-            if aspect == '16x9':
+            if aspect in required_aspect:
                 # We prefer good artwork
-                if category == 'Poster Art' or category == 'VOD Art' or category == 'Banner-L1' or category == 'Banner-L2' or category == 'Logo':
+                if category == 'Poster Art' or category == 'Box Art' or category == 'VOD Art' or category == 'Staple' or category.startswith('Banner-L') or category == 'Logo':
                     uri = details["uri"]
                     break
                 elif category == 'Iconic' or category == 'Cast Ensemble':
@@ -128,7 +134,7 @@ class Tv_meta_az_sd(object):
         except Exception as e:
             logging.debug("Got exception %s during loop" % e)
 
-    logging.info("Finished loop with URLs poster: %s fallback_uri: %s" %(self._image_url(uri), self._image_url(fallback_uri)))
+    logging.info("Finished loop with URLs uri: %s fallback_uri: %s req_aspect: %s" %(self._image_url(uri), self._image_url(fallback_uri), required_aspect))
     if uri is None: uri = fallback_uri
     if uri:
         return self._image_url(uri);
@@ -153,12 +159,12 @@ class Tv_meta_az_sd(object):
 
     res = self._fetch_from_sd(sd_programid)
     # Got a dict like {u'programID': u'MV000000000000', u'data': [{u'category
-    poster = None
-    fanart = self._artwork_from_dict(res)
+    poster = self._artwork_from_dict(res, ['3x2', '2x3', '3x4'])
+    fanart = self._artwork_from_dict(res, ['16x9'])
 
     logging.debug(fanart)
 
-    logging.debug("poster=%s fanart=%s" % (poster, fanart))
+    logging.debug("URL poster=%s fanart=%s" % (poster, fanart))
     return {"poster": poster, "fanart": fanart}
 
 if __name__ == '__main__':
