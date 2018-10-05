@@ -9062,7 +9062,10 @@ sub getEpisodeImageFromArtwork
       # we allow any category of image.
       for my $minWidth (900, 400, 200, 0) {
           next if $minWidth > $maxWidth && !$allowAnyArt;
-          for my $d (@{$art->{data}}) {
+          # Testing suggests that SD appends images to its artwork as new
+          # series become available, so prefer the later artwork by
+          # reversing the array.
+          for my $d (reverse(@{$art->{data}})) {
               next unless $d;
               my $imgWidth = $d->{width};
               # If we're size 0 it means we couldn't find a decent
