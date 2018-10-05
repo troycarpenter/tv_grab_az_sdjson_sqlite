@@ -9056,10 +9056,15 @@ sub getEpisodeImageFromArtwork
       # Allow user to configure maximum size we prefer our artwork.
       # If we find no decent artwork then we may use larger.
       state $maxWidth = $opt->{'artwork-max-width'} // $conf->{'artwork-max-width'} // 1080;
+      # Prefer "poster" shape elements to wide art since that seems to
+      # be what clients prefer to show.
+      my %required_aspect;
+      @required_aspect{qw/3x2 2x3 3x4/} = ();
       # For the moment simply return the first match we find that
       # exceeds the given width and is of an appropriate category
       # since any art is better than no art. If $allowAnyArt then
       # we allow any category of image.
+      my @fallback_tuple;
       for my $minWidth (900, 400, 200, 0) {
           next if $minWidth > $maxWidth && !$allowAnyArt;
           # Testing suggests that SD appends images to its artwork as new
@@ -9067,7 +9072,13 @@ sub getEpisodeImageFromArtwork
           # reversing the array.
           for my $d (reverse(@{$art->{data}})) {
               next unless $d;
+              my $uri = $d->{uri};
+              next unless $uri;
               my $imgWidth = $d->{width};
+              #my $aspect = $d->{aspect} // "N/A";
+              #my $category = $d->{category};
+              # say STDERR "$minWidth $allowAnyArt $imgWidth $aspect $category $uri";
+
               # If we're size 0 it means we couldn't find a decent
               # image so use any other images we can find such as
               # cast images or Iconic images. Seems to happen on
@@ -9091,15 +9102,19 @@ sub getEpisodeImageFromArtwork
                          $category eq 'Logo');
                   }
               }
-              if ($canUseImage)
-                {
-                    my $uri = $d->{uri};
-                    if ($uri)
-                      {
-                          return ($uri, $imgWidth, $d->{height});
-                      }
-                }
+              if ($canUseImage) {
+                  my $aspect = $d->{aspect} // "N/A";
+                  if (exists $required_aspect{$aspect}) {
+                      # Correct aspect ratio, so use it.
+                      return ($uri, $imgWidth, $d->{height});
+                  } else {
+                      @fallback_tuple = ($uri, $imgWidth, $d->{height}) unless scalar @fallback_tuple;
+                  }
+              }
           }
+      }
+      if (scalar @fallback_tuple) {
+          return @fallback_tuple;
       }
       return;
   }
