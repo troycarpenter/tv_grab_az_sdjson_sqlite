@@ -86,20 +86,30 @@ class Tv_meta_az_sd(object):
     fallback_uri = None
     logging.debug(art["data"])
     logging.debug("Length=%s" % len(art["data"]))
-    for details in art["data"]:
+    # Testing suggests that for long running shows, we should take the
+    # _last_ item we find rather than the first. It appears artwork
+    # is appended to the list by Schedules Direct. So, if we take the
+    # first good match, then we get images showing people who are
+    # no longer with the show. If we take the last image, then it
+    # seems better.
+    for required_size in ['Ms', 'Lg']:
+      if uri:
+          break
+      logging.debug("Trying URLs with size %s" % required_size)
+      for details in reversed(art["data"]):
         # Each entry is similar to {u'category': u'Banner-L1', u'width': u'1920', u'size': u'Ms', u'aspect': u'16x9', u'tier': u'Series', u'text': u'yes', u'height': u'1080', u'uri': u'https://....', u'primary': u'true'}
         # With have an exception loop since some images are missing size.
         try:
-            logging.debug("Trying %s" % details)
-            logging.debug("URL %s %s %s "% (self._image_url(details["uri"]), details["category"], details["width"])) # , details["caption"]))
             size = details["size"]
-            if (size != 'Ms' and size != 'Lg'):
+            if (size != required_size):
                 continue
+            logging.debug("Trying %s" % details)
+            logging.debug("URL %s %s %sx%s (%s/%s)"% (self._image_url(details["uri"]), details["category"], details["width"], details["height"], details["size"], details["aspect"])) # , details["caption"]))
             category = details["category"]
             aspect = details["aspect"]
             if aspect == '16x9':
                 # We prefer good artwork
-                if category == 'Poster Art' or category == 'VOD Art' or category == 'Banner-L1':
+                if category == 'Poster Art' or category == 'VOD Art' or category == 'Banner-L1' or category == 'Banner-L2' or category == 'Logo':
                     uri = details["uri"]
                     break
                 elif category == 'Iconic' or category == 'Cast Ensemble':
@@ -118,7 +128,7 @@ class Tv_meta_az_sd(object):
         except Exception as e:
             logging.debug("Got exception %s during loop" % e)
 
-    logging.info("Finished loop with uri: %s fallback_uri: %s" %(self._image_url(uri), self._image_url(fallback_uri)))
+    logging.info("Finished loop with URLs poster: %s fallback_uri: %s" %(self._image_url(uri), self._image_url(fallback_uri)))
     if uri is None: uri = fallback_uri
     if uri:
         return self._image_url(uri);
