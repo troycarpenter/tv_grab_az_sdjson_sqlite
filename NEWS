@@ -1,5 +1,8 @@
 User-visible and notable changes. For new options, see the README.md.
 
+* 201810
+- Prefer "poster" for fanart rather than wide art. This seems to be what media players prefer.
+
 * 201809
 - Database is automatically vacuumed every few months to improve performance.
 - Database version upgraded. This allows us to lazily expire records, improving run time.

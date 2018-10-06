@@ -3,6 +3,9 @@ XMLTV grabber for Schedules Direct JSON service, optimized for large numbers
 of channels, with local fast caching of xmltv output.
 Also includes a Tvheadend metadata program for populating fanart for Kodi.
 
+Place the tv_grab_az_sdjson_sqlite and tv_meta_az_sd.py in the same location
+as existing grabber files (probably /usr/bin).
+
 Overview
 --------
 
