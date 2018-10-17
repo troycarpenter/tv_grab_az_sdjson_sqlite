@@ -134,6 +134,12 @@ much memory as it needs, it can be useful to set it to a high value
 such as "maxmemory 1gb", and then monitor how much memory is actually
 used over the course of a week.
 
+Ensure that the redis.conf does _not_ have a "maxmemory-policy" of
+"noeviction". For example, set it to "maxmemory-policy allkeys-lru".
+
+If you need to erase all cached entries in Redis then you can use
+"redis-cli flushdb".
+
 File caching is an alternative to redis and can be used if you have a
 fast filesystem.  Since file system does not natively support purging,
 it is recommended to also add the purge option. This is selected via
