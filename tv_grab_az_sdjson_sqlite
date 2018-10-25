@@ -195,6 +195,11 @@ my $num_prog_from_cache = 0;
 my $num_prog_details_not_from_cache = 0;
 my $num_prog_details_total = 0;
 my $len_prog_not_printed = 0;
+my $num_imdb_lookups_other = 0;
+my $num_imdb_lookups_movie = 0;
+my $num_imdb_lookups_from_cache = 0;
+my $num_imdb_lookups_movie_success = 0;
+my $num_imdb_lookups_other_success = 0;
 
 my $passwordHash;
 
@@ -331,6 +336,13 @@ my %catmap_minor = (
                            update-description-with-rating!
                            update-description-with-title!
                            update-previously-shown-with-year!
+                           use-imdb!
+                           imdb-db-type=s
+                           imdb-db=s
+                           imdb-user=s
+                           imdb-pass=s
+                           imdb-dir=s
+                           prefer-imdb-rating!
                            content-rating-order=s
                            passwordhash=s
                            cache-driver=s
@@ -424,6 +436,18 @@ my $sth4;
 #
 print (STDERR "Opening the local database\n") if (!$quiet);
 DB_open_global($conf->{'database'}->[0]);
+
+my $imdb;
+if (get_option("use-imdb")) {
+    my $dbtype = get_option('imdb-db-type') // "mysql";
+    my $db = get_option('imdb-db') // "imdb"; # Or use imdb@localhost, etc.
+    my $user = get_option('imdb-user') // "imdb";
+    my $pass = get_option('imdb-pass') // "imdb";
+    my $dbi = "DBI:$dbtype:$db";
+    $imdb = TVHIMDB->new(dbi => $dbi, user=>$user, pass=>$pass);
+    my $dir = get_option('imdb-dir') // "/var/db/mysql_secure";
+    $imdb->import($dir);
+}
 
 #
 # Provide the ability to force a (mostly) complete download
@@ -1687,6 +1711,9 @@ if (!get_option('no-channel-output')) {
       my $num_prog_details_from_cache = $num_prog_details_total - $num_prog_details_not_from_cache;
       printf (STDERR "   %d of %d program details retrieved from cache (%0.2f%%)\n", $num_prog_details_from_cache, $num_prog_details_total, $num_prog_details_from_cache / $num_prog_details_total * 100) if (!$quiet && $num_prog_details_from_cache > 0);
   }
+  printf (STDERR "   $num_imdb_lookups_other_success of $num_imdb_lookups_other non-movie details retrieved from imdb (%0.2f%%)\n", $num_imdb_lookups_other_success / $num_imdb_lookups_other * 100) if !$quiet && $num_imdb_lookups_other;
+  printf (STDERR "   $num_imdb_lookups_movie_success of $num_imdb_lookups_movie movie details retrieved from imdb (%0.2f%%)\n", $num_imdb_lookups_movie_success / $num_imdb_lookups_movie * 100) if !$quiet && $num_imdb_lookups_movie;
+  printf (STDERR "   $num_imdb_lookups_from_cache of %d program details retrieved from imdb cache (%0.2f%%)\n", $num_imdb_lookups_other + $num_imdb_lookups_movie, $num_imdb_lookups_from_cache / ($num_imdb_lookups_other + $num_imdb_lookups_movie) * 100) if !$quiet && $num_imdb_lookups_from_cache;
 
   if ($use_benchmark) {
       printf (STDERR "   xmltv generation took %s\n", Benchmark::timestr(Benchmark::timediff($t_end, $t_start))) if (!$quiet);
@@ -2017,6 +2044,24 @@ sub get_cache_object_for_programme_details {
     return $cache;
 }
 
+sub get_cache_object_for_imdb {
+    state $cache;
+    return $cache if $cache;
+    require CHI;
+    $cache = CHI->new(driver => get_option('cache-driver'),
+                      namespace => "i." . get_cache_namespace(),
+                      root_dir => cache_get_root_dir(),
+                      expires_on_backend => 1,
+                      compress_threshold => get_option('cache-compression-threshold') // 1024 * 2,
+                      # We use an l1 cache since programmes are frequently repeated.
+                      # For example "Night News" will be on every day, and shows are
+                      # repeated in morning and night.
+                      l1_cache => { driver => 'Memory', global => 1, max_size => 1024 * 1024 * 20 },
+                     );
+    return $cache;
+}
+
+
 sub is_cache_enabled {
     # If we have a driver then we are caching.
     state $is_enabled = get_option('cache-driver');
@@ -2279,22 +2324,35 @@ sub get_decoded_artwork_for_progid {
 }
 
 sub get_desc {
-    my ($r, $desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails, $ratings) = @_;
+    my ($r, $desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails, $ratings, $starRatings) = @_;
     return $desc unless $desc;
 
-    if (get_option_update_description_xx('update-description-with-stars') && defined($programDetails->{'movie'}->{'qualityRating'})) {
+    if (get_option_update_description_xx('update-description-with-stars') && defined($starRatings)) {
         my $stars;
-        foreach my $quality(@{$programDetails->{'movie'}->{'qualityRating'}}) {
-            my $min = $quality->{'minRating'};
-            my $max = $quality->{'maxRating'};
-            my $rating = $quality->{'rating'};
-            if ($max == 4 && $min == 1) {
-                my $color = get_option('update-description-with-stars-color') // "white";
-                my $star_char = $color =~ /white/i ? "\N{WHITE STAR}" : "\N{BLACK STAR}";
-                $stars = $star_char x $rating;
-                $stars .= "\N{VULGAR FRACTION ONE HALF}" if ($rating - int($rating) > 0);
-                last;
+        for my $body(sort keys %$starRatings) {
+            my $quality = $starRatings->{$body};
+            my ($rating, $max) = split '/', $quality;
+            next unless $max > 0;
+            # Make in to a 5-star rating.
+            # For example if max=5 and our rating is out of 5,
+            # then we'd have multiplier=5/5. If rating is out of 10
+            # then 5/10=0.5 so we'd have to half the rating.
+            my $multiplier = 5 / $max;
+            $rating *= $multiplier;
+            my $color = get_option('update-description-with-stars-color') // "white";
+            my $star_char = $color =~ /white/i ? "\N{WHITE STAR}" : "\N{BLACK STAR}";
+            $stars = $star_char x $rating;
+            $rating = int($rating * 4)/4;
+            my $frac = $rating - int($rating);
+            if ($frac >= 0.75) {
+                $stars .= "\N{VULGAR FRACTION THREE QUARTERS}";
+            } elsif ($frac >= 0.5) {
+                $stars .= "\N{VULGAR FRACTION ONE HALF}";
+            } elsif ($frac >= 0.25) {
+                $stars .= "\N{VULGAR FRACTION ONE QUARTER}";
             }
+
+            last;
         }
         $desc = "$stars. $desc" if ($stars);
     }
@@ -2545,6 +2603,122 @@ sub get_ratings {
     return $ratings;
 }
 
+sub get_star_rating_from_quality {
+    my $quality = shift;
+    my $body = $quality->{'ratingsBody'};
+    my $min = $quality->{'minRating'};
+    my $max = $quality->{'maxRating'};
+    my $incr = $quality->{'increment'};
+    my $rating = $quality->{'rating'};
+    if (defined($body) && defined($min) && defined($max) && defined($incr) && defined($rating) &&
+        looks_like_number($min) && looks_like_number($max) && looks_like_number($incr) && looks_like_number($rating))
+      {
+          $min = 0 + $min;
+          $max = 0 + $max;
+          $incr = 0 + $incr;
+          $rating = 0 + $rating;
+          $rating = $min if ($rating < $min);
+          $rating = $max if ($rating > $max);
+          my $adjustedRating = ($rating - $min);
+          my $adjustedMax = ($max - $min);
+          return ($body, "$adjustedRating/$adjustedMax");
+      }
+    return undef;
+}
+
+sub get_imdb_details {
+    state $use_imdb = get_option('use-imdb');
+    return unless $use_imdb;
+    my ($title, $subtitle, $year, $season_num, $episode_num, $pID, $sup_year) = @_;
+    my $show_type = substr($pID, 0, 2);
+    my $is_movie = $show_type eq 'MV';
+
+    if ($is_movie) {
+        ++$num_imdb_lookups_movie;
+    } else {
+        ++$num_imdb_lookups_other;
+    }
+
+    my $cache = get_cache_object_for_imdb() if is_cache_enabled();
+    # We use the programID for caching data since all our lookup
+    # data (season, episode, year, etc.) derive from it.
+    my $key_local = $pID if $cache;
+    my $key = $key_local if $cache; # No need to "sha1_hex($key_local)" since key is unique and short.
+    my $need_store = 1;
+
+    my $cached_value = $cache->get($key) if $cache;
+    my ($imdbRating, $imdbID, $imdbParentID);
+    if (defined $cached_value) {
+        ++$num_imdb_lookups_from_cache;
+        return if (!$cached_value);
+        ($imdbRating, $imdbID, $imdbParentID) = split ",", $cached_value;
+        $imdbRating = undef unless $imdbRating;
+        $imdbID = undef unless $imdbID;
+        $imdbParentID = undef unless $imdbParentID;
+        $need_store = 0;
+    } else {
+        $year = substr($year, 0, 4) if ($year && length $year > 4);
+        $sup_year = substr($sup_year, 0, 4) if ($sup_year && length $sup_year > 4);
+        ($imdbRating, $imdbID, $imdbParentID) = $show_type eq 'SH' ? $imdb->find_details_for_show($title, $year) :
+          $is_movie ? $imdb->find_details_for_movie($title, $year) :
+          $imdb->find_details_for_episode($title, $subtitle, $year, $season_num, $episode_num);
+        if (!$is_movie && !$imdbID && !$imdbParentID && (($sup_year && $sup_year ne $year) || (!$subtitle && $show_type ne 'SH'))) {
+            # Failed to find episode details. Try the series instead.
+            # Do a lookup of the series/show by calling ourselves without season details.
+            # This ensures we do the second lookup in the cache.
+            #
+            # But ensure we only recurse once! This means we also pick
+            # up episodes which have season/episode that do not match
+            # imdb due to having no subtitle (but imdb fakes one of
+            # "Episode #1.1" for example), so we recurse and pick up
+            # the show instead.
+            $pID = 'SH' . substr($pID, 2, 8) . '0000';
+            ($imdbRating, $imdbID, $imdbParentID) =  get_imdb_details($title, undef, $sup_year // $year, undef, undef, $pID, undef);
+        }
+    }
+
+    if ($imdbID || $imdbParentID) {
+        if ($is_movie) {
+            ++$num_imdb_lookups_movie_success;
+        } else {
+            +++$num_imdb_lookups_other_success;
+        }
+    }
+
+    if ($cache && $need_store) {
+        my $val = join ",", $imdbRating // "", $imdbID // "", $imdbParentID // "";
+        my $expiry = cache_get_expiry();
+        $cache->set($key, $val, $expiry);
+    }
+    return ($imdbRating, $imdbID, $imdbParentID);
+}
+
+sub get_star_ratings {
+    my ($programDetails, $supplementalDetails, $pID, $title, $sub_title, $season_num, $episode_num, $year, $imdbRating) = @_;
+    # XMLTV star-rating starts from zero (so if rating agency is 1-4,
+    # we adjust the reported values to be from 0-3.
+    my $starRatings = {};
+    # No need to "rebase" figures since it is 0..10/10.
+    if (defined($imdbRating)) {
+        $starRatings->{"imdb"} = "$imdbRating/10";
+        return $starRatings if get_option("prefer-imdb-rating");
+    }
+
+    if (defined($supplementalDetails->{'movie'}->{'qualityRating'})) {
+        foreach my $quality(@{$supplementalDetails->{'movie'}->{'qualityRating'}}) {
+            my ($body, $value) = get_star_rating_from_quality($quality);
+            $starRatings->{$body} = $value if $body && $value;
+        }
+    }
+    if (defined($programDetails->{'movie'}->{'qualityRating'})) {
+        foreach my $quality(@{$programDetails->{'movie'}->{'qualityRating'}}) {
+            my ($body, $value) = get_star_rating_from_quality($quality);
+            $starRatings->{$body} = $value if $body && $value;
+        }
+    }
+    return $starRatings;
+}
+
 
 sub get_season_episode {
     my ($pID, $programDetails, $supplementalDetails, $scheduleDetails) = @_;
@@ -2793,6 +2967,7 @@ sub write_programme_details {
       # my $startTime = DateTime::Format::SQLite->parse_datetime($r->[1]);
       # my $endTime = $startTime->clone()->add(seconds => $r->[2]);
       my $pID = $r->[3];
+      my $is_movie = substr($pID, 0, 2) eq 'MV';
 
     # We fetch artwork from the DB separately. We used
     # to fetch it all in one SQL, but the artwork JSON
@@ -2895,8 +3070,10 @@ sub write_programme_details {
           $supplementalDetails->{'movie'}->{'year'} //
           $programDetails->{originalAirDate} //
           $supplementalDetails->{originalAirDate};
+       my $sup_year = $supplementalDetails->{'movie'}->{'year'} // $supplementalDetails->{originalAirDate};
 
-        my ($season_num, $episode_num, $max_season_num, $max_episode_num, $season_xmltvns, $episode_xmltvns, $part_xmltvns, $thetvdbSeriesID, $thetvdbEpisodeID) = get_season_episode($pID, $programDetails, $supplementalDetails, $scheduleDetails);
+    my ($season_num, $episode_num, $max_season_num, $max_episode_num, $season_xmltvns, $episode_xmltvns, $part_xmltvns, $thetvdbSeriesID, $thetvdbEpisodeID) = get_season_episode($pID, $programDetails, $supplementalDetails, $scheduleDetails);
+        my ($imdbRating, $imdbID, $imdbParentID) = get_imdb_details($title, $sub_title, $year, $season_num, $episode_num, $pID, $sup_year);
         my $advisories = get_content_advisory($programDetails, $supplementalDetails);
         my ($artURI, $artWidth, $artHeight) = get_artwork_image($pID, $artwork, $supArt);
         # Additional artwork, normally specific to the episode. This is only
@@ -3026,6 +3203,7 @@ sub write_programme_details {
         }
 
         my $ratings = get_ratings($supplementalDetails, $programDetails, $scheduleDetails);
+        my $starRatings = get_star_ratings($programDetails, $supplementalDetails, $pID, $title, $sub_title, $season_num, $episode_num, $year, $imdbRating);
 
         # Choose the "best" (i.e. longer) description if available
         if (defined($programDetails->{'descriptions'}->{'description1000'}))
@@ -3035,7 +3213,7 @@ sub write_programme_details {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($r2, $desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails, $ratings), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($r2, $desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails, $ratings, $starRatings), 'lang' => $lang);
               }
           }
         elsif (defined($programDetails->{'descriptions'}->{'description100'}))
@@ -3045,7 +3223,7 @@ sub write_programme_details {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($r2, $desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails, $ratings), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($r2, $desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails, $ratings, $starRatings), 'lang' => $lang);
               }
           }
         elsif (defined($supplementalDetails->{'descriptions'}->{'description1000'}))
@@ -3055,7 +3233,7 @@ sub write_programme_details {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($r2, $desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails, $ratings), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($r2, $desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails, $ratings, $starRatings), 'lang' => $lang);
               }
           }
         elsif (defined($supplementalDetails->{'descriptions'}->{'description100'}))
@@ -3065,7 +3243,7 @@ sub write_programme_details {
                 my $lang = $d->{'descriptionLanguage'};
                 my $desc = $d->{'description'};
                 next if ((!defined($lang) || (!defined($desc))));
-                $w->dataElement('desc', get_desc($r2, $desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails, $ratings), 'lang' => $lang);
+                $w->dataElement('desc', get_desc($r2, $desc, $actors, $year, $season_num, $episode_num, $max_season_num, $max_episode_num, $categories, $scheduleDetails, $advisories, $artURI, $artURI2, $programDetails, $ratings, $starRatings), 'lang' => $lang);
               }
         }
         $w->raw($w2->to_string());
@@ -3133,7 +3311,9 @@ sub write_programme_details {
                 $w->emptyTag('icon', 'src' => $url);
             }
         }
-
+        # Prefer episode id to series id if we have both.
+        $w->dataElement('url', "https://www.imdb.com/title/$imdbID") if $imdbID;
+        $w->dataElement('url', "https://www.imdb.com/title/$imdbParentID") if $imdbParentID;
         if (defined($programDetails->{'officialURL'}))
           {
             $w->dataElement('url', $programDetails->{'officialURL'});
@@ -3170,6 +3350,9 @@ sub write_programme_details {
         if ($thetvdbEpisodeID) {
             $w->dataElement('episode-num', "episode/$thetvdbEpisodeID", system => 'thetvdb.com');
         }
+        # We base our imdb.com system on the existing themoviedb and thetvdb systems.
+        $w->dataElement('episode-num', ($is_movie ? "movie" : "episode") . "/$imdbID", system => 'imdb.com') if $imdbID;
+        $w->dataElement('episode-num', "series/$imdbParentID", system => 'imdb.com') if $imdbParentID;
 
         if (defined($scheduleDetails->{'videoProperties'}))
           {
@@ -3304,57 +3487,6 @@ sub write_programme_details {
             $w->endTag('rating')
           }
 
-        # XMLTV star-rating starts from zero (so if rating agency is 1-4,
-        # we adjust the reported values to be from 0-3.
-        my $starRatings = {};
-        if (defined($supplementalDetails->{'movie'}->{'qualityRating'}))
-          {
-            foreach my $quality(@{$supplementalDetails->{'movie'}->{'qualityRating'}})
-              {
-                my $body = $quality->{'ratingsBody'};
-                my $min = $quality->{'minRating'};
-                my $max = $quality->{'maxRating'};
-                my $incr = $quality->{'increment'};
-                my $rating = $quality->{'rating'};
-                if (defined($body) && defined($min) && defined($max) && defined($incr) && defined($rating) &&
-                    looks_like_number($min) && looks_like_number($max) && looks_like_number($incr) && looks_like_number($rating))
-                  {
-                    $min = 0 + $min;
-                    $max = 0 + $max;
-                    $incr = 0 + $incr;
-                    $rating = 0 + $rating;
-                    $rating = $min if ($rating < $min);
-                    $rating = $max if ($rating > $max);
-                    my $adjustedRating = ($rating - $min);
-                    my $adjustedMax = ($max - $min);
-                    $starRatings->{$body} = "$adjustedRating/$adjustedMax";
-                  }
-              }
-          }
-        if (defined($programDetails->{'movie'}->{'qualityRating'}))
-          {
-            foreach my $quality(@{$programDetails->{'movie'}->{'qualityRating'}})
-              {
-                my $body = $quality->{'ratingsBody'};
-                my $min = $quality->{'minRating'};
-                my $max = $quality->{'maxRating'};
-                my $incr = $quality->{'increment'};
-                my $rating = $quality->{'rating'};
-                if (defined($body) && defined($min) && defined($max) && defined($incr) && defined($rating) &&
-                    looks_like_number($min) && looks_like_number($max) && looks_like_number($incr) && looks_like_number($rating))
-                  {
-                    $min = 0 + $min;
-                    $max = 0 + $max;
-                    $incr = 0 + $incr;
-                    $rating = 0 + $rating;
-                    $rating = $min if ($rating < $min);
-                    $rating = $max if ($rating > $max);
-                    my $adjustedRating = ($rating - $min);
-                    my $adjustedMax = ($max - $min);
-                    $starRatings->{$body} = "$adjustedRating/$adjustedMax";
-                  }
-              }
-          }
         foreach my $body(sort keys %{$starRatings})
           {
             $w->startTag('star-rating', 'system' => $body);
@@ -7067,7 +7199,7 @@ sub emptyTag {
     my ($self, $tag, %tags) = @_;
     $self->{str} .= "<$tag ";
     $self->_add_attribs(%tags);
-    $self->{str} .= " />";
+    $self->{str} .= " />\n";
     return $self;
 }
 
@@ -7084,6 +7216,192 @@ sub dataElement {
 }
 
 sub end {}
+
+package TVHIMDB;
+use File::Spec::Functions qw(catdir);
+
+sub new {
+    my ($class, %args) = @_;
+    my $self = {};
+    my $dbi = $args{dbi};
+    my $user = $args{user};
+    my $pass = $args{pass};
+    # Connect or print error and die.
+    $self->{db} = DBI->connect($dbi, $user, $pass,
+                               {
+                                AutoCommit => 0, RaiseError => 1, PrintError => 1}
+                              );
+
+    bless $self, $class;
+    $self->_update_schema();
+    return $self;
+}
+
+sub _update_schema {
+    my ($self) = @_;
+    my $db = $self->{db};
+
+    $db->do("create table if not exists imdb_settings (tag varchar(100) primary key not null, value text)");
+    my $version = $db->selectrow_array("select value from imdb_settings where tag='version'");
+    if (!$version) {
+        my @sql = (
+                   # Need runtimeMinutes as an int since one show says it is 125156 minutes long.
+                   "create table if not exists imdb_title(tconst varchar(12) primary key not null, titleType text, primaryTitle text NOT NULL, originalTitle text, isAdult boolean, startYear smallint unsigned, endYear smallint unsigned, runtimeMinutes mediumint unsigned, genres text, downloaded datetime default CURRENT_TIMESTAMP COLLATE utf8_general_ci)",
+                   "create index idx_i_t on imdb_title(primaryTitle(32), startYear)", # Average length of title is 19; max 408, so 32 should be more than enough.
+
+                   "create table if not exists imdb_episode(tconst varchar(12) not null, parentTconst varchar(12) not null, seasonNumber tinyint unsigned, episodeNumber mediumint unsigned, downloaded datetime default CURRENT_TIMESTAMP, CONSTRAINT pk_i_e PRIMARY KEY (tconst, parentTconst))",
+                   "create unique index idx_i_e on imdb_episode(episodeNumber,seasonNumber,tconst)",
+
+                   "create table if not exists imdb_ratings (tconst varchar(12) primary key not null, averageRating numeric, numVotes integer,  parentTconst varchar(12), downloaded datetime default CURRENT_TIMESTAMP)",
+
+                  );
+        for (@sql) {
+            my $rc = $db->do($_);
+        }
+
+        $db->do("replace into imdb_settings(tag,value) values('version', 1)");
+        $db->commit();
+    }
+    $db->commit();
+}
+
+sub _find_id {
+    my ($self, $stmt, @args) = @_;
+    $stmt->execute(@args);
+    my @ret = $stmt->fetchrow_array;
+    $stmt->finish;
+    return wantarray? @ret : $ret[0];
+}
+
+sub _find_rating_by_tconst {
+    my ($self, $tconst, $parentTconst) = @_;
+    my $rating;
+    if ($tconst) {
+        state $stmt = $self->{db}->prepare_cached("select averageRating from imdb_ratings where tconst=?");
+        $stmt->execute($tconst);
+        $rating = $stmt->fetchrow_array;
+        $stmt->finish;
+    }
+    # Some episode (such as future episodes) have no rating, so search for the rating on the series.
+    if (!$rating && $parentTconst) {
+        state $stmt = $self->{db}->prepare_cached("select averageRating from imdb_ratings where tconst=?");
+        $stmt->execute($parentTconst);
+        $rating = $stmt->fetchrow_array;
+        $stmt->finish;
+    }
+    return wantarray ? ($rating, $tconst, $parentTconst) : $rating;
+}
+
+sub find_details_for_episode {
+    my ($self, $title, $subtitle, $year, $season, $episode, $sup_year) = @_;
+
+    if (!$subtitle && !$season && !$episode && $year) {
+        return $self->find_details_for_show($title, $year);
+    }
+
+    my ($tconst, $parentTconst);
+    if ($title && $subtitle) {
+        # We don't check season/episode since exact match of title/subtitle is usually good enough.
+        # and E.seasonNumber=? and E.episodeNumber=?
+        state $stmt = $self->{db}->prepare_cached("select TE.tconst,TE.parentTconst from imdb_title S, imdb_title E, imdb_episode TE where S.primaryTitle=? and E.primaryTitle=? and TE.parentTconst = S.tconst and TE.tconst = E.tconst and E.startYear=?");
+        ($tconst, $parentTconst) = $self->_find_id($stmt, $title, $subtitle, $year);
+        # Could not find id for episode based on subtitle.
+
+        if (!$tconst && $season && $episode) {
+            # It's unusual for IMDB to not have details of a series. So we assume sub-title is incorrect.
+            # E.g., S11E13 of CSI has "Mrs" on SD and "Mrs." on IMDB. So search by season/episode.
+            # The only reason we don't always search by season/episode first is that sometimes
+            # different sources have different orderings for season/episode, but episode names
+            # tend to be consistent nowadays; however if above matches fail then it seems
+            # sensible to do a fallback. We use soundex to ensure that the subtitles
+            # "sound" similar, which means in the above example they would have the
+            # same value.
+            #
+            # We currently don't do soundex on series name since modern series are standardized,
+            # but old series such as "Quincy" can be "Quincy, M.E." (SD) vs "Quincy M.E." (imdb)
+            # and this isn't fixed in the "akas" table.
+            #
+            # Try by season/episode and approx match of subtitle.
+            state $stmt = $self->{db}->prepare_cached("select TE.tconst,TE.parentTconst from imdb_title S, imdb_title E, imdb_episode TE  where S.primaryTitle=? and TE.seasonNumber=? and TE.episodeNumber=? and TE.parentTconst = S.tconst and TE.tconst=E.tconst and soundex(E.primaryTitle) = soundex(?) and E.startYear=?");
+            ($tconst, $parentTconst) = $self->_find_id($stmt, $title, $subtitle, $season, $episode, $year);
+        }
+    }
+
+    if ($tconst) {
+        return $self->_find_rating_by_tconst($tconst, $parentTconst);
+    } else {
+        return;
+    }
+}
+
+sub find_details_for_show {
+    my ($self, $title, $year) = @_;
+    return unless $title && $year;
+    # Currently ignore "originalTitle=$title"
+
+    state $stmt = $self->{db}->prepare_cached("select tconst from imdb_title where primaryTitle=? and startYear=? and titleType like 'tv%'");
+    my $tconst = $self->_find_id($stmt, $title, $year);
+    my $rating = $self->_find_rating_by_tconst($tconst);
+    # undef for imdbid since we are a generic show (series).
+    return ($rating, undef, $tconst);
+}
+
+sub find_details_for_movie {
+    my ($self, $title, $year) = @_;
+    return unless $title && $year;
+
+    my $stmt = $self->{db}->prepare_cached("select tconst from imdb_title where primaryTitle=? and startYear=? and titleType in('movie', 'tvmovie', 'tvShort')");
+    my $tconst = $self->_find_id($stmt, $title, $year);
+
+    return $self->_find_rating_by_tconst($tconst);
+}
+
+sub _import_file {
+    my ($self, $entry, $path) = @_;
+    my @s = stat $path or return;
+    my $mtime = $s[9];
+    my $table = $entry->{table};
+    my $tag = "import_$table";
+    my $db = $self->{db};
+    my $last_import = $db->selectrow_array("select value from imdb_settings where tag='$tag'");
+    # Previously imported?
+    return if $last_import && $last_import == $mtime;
+    print STDERR "Import $path in to table $table\n" unless $quiet;
+    my $ignore = $entry->{mode} // 'ignore';
+    my $columns = $entry->{columns};
+    $db->do("load data infile ? $ignore into table $table ignore 1 lines ($columns) set downloaded = current_timestamp", {}, $path);
+    $db->do("replace into imdb_settings(tag, value) values(?,?)", {}, $tag, $mtime);
+    $db->commit();
+    print STDERR "Finished import $path in to table $table\n" unless $quiet;
+}
+
+sub import {
+    my ($self, $dir) = @_;
+    return unless $dir;
+    my @table = (
+                 {
+                  table => "imdb_title",
+                  file => "title.basics",
+                  columns => "tconst,titleType,primaryTitle,originalTitle,isAdult,startYear,endYear,runtimeMinutes,genres",
+                 },
+                 {
+                  table => "imdb_episode",
+                  file => "title.episode",
+                  columns => "tconst,parentTconst,seasonNumber,episodeNumber",
+                 },
+                 {
+                  table => "imdb_ratings",
+                  file => "title.ratings",
+                  columns => "tconst,averageRating,numVotes",
+                  mode => "replace",
+                 }
+                );
+    for my $entry (@table) {
+        my $file = $entry->{file};
+        my $path = catdir($dir, "$file.tsv");
+        $self->_import_file($entry, $path);
+    }
+}
 
 package SchedulesDirect v20141201.0.0;
 

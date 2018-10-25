@@ -2,6 +2,7 @@ User-visible and notable changes. For new options, see the README.md.
 
 * 201810
 - Prefer "poster" for fanart rather than wide art. This seems to be what media players prefer.
+- Initial IMDB support to add ratings and URLs to shows.
 
 * 201809
 - Database is automatically vacuumed every few months to improve performance.

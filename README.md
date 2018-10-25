@@ -184,6 +184,81 @@ too low will waste CPU compressing/uncompressing, setting it
 too high will mean nothing is compressed and the cache will
 be larger.
 
+IMDB Support
+------------
+
+Experimental IMDB support is included. Currently many steps needs to
+be performed manually, but they will be automated in the future.
+
+This feature adds details to the generated xmltv from IMDB such as
+ratings for shows, URL information, etc. This is useful since
+SchedulesDirect does not provide ratings for shows, only for movies,
+and many of the URLs it provides for movies are outdated.
+
+An example of the additional IMDB fields in the generated file:
+```
+<url >https://www.imdb.com/title/tt2350522</url>
+<url >https://www.imdb.com/title/tt1219024</url>
+<episode-num system = "imdb.com" >episode/tt2350522</episode-num>
+<episode-num system = "imdb.com" >series/tt1219024</episode-num>
+<star-rating system = "imdb" ><value >9/10</value></star-rating>
+```
+Note that many lookups will fail primarily because tv guides are full of
+local shows, or have programmes that are old where there are discrepencies
+on when the show was made or how it should be spelled (such as "Quincy",
+"Quincy, M.E.", and "Quincy M.E.").
+
+The IMDB support needs mysql server running since sqlite was too slow
+for the large volumes of data that needs to be frequently imported.
+
+As user root:
+```
+mysql
+create database imdb character set utf8mb4;
+create user 'imdb'@'%' identified by 'imdb';
+grant all on imdb.* to 'imdb'@'%';
+create user 'imdb'@'localhost' identified by 'imdb';
+grant all on imdb.* to 'imdb'@'localhost';
+grant file on *.* to 'imdb'@'localhost';
+flush privileges;
+```
+
+The grabber needs to be run with the extra argument `--use-imdb`, with
+additional configuration available if you choose to use a different
+username, password, database, etc. (see below). A common additional
+argument is "--prefer-imdb-rating" to prefer the IMDB ratings
+over the SchedulesDirect ratings.
+
+The IMDB datasets can be downloaded from https://www.imdb.com/interfaces/
+You need the `title.basics.tsv.gz`, `title.episode.tsv.gz`, and
+`title.ratings.tsv.gz`.
+
+These files should be uncompressed and placed in to your mysql
+"secure" directory. This is because modern mysql locks down
+bulk loading of data.
+`mysql -p -e "SHOW VARIABLES WHERE Variable_Name = 'secure_file_priv'"`
+
+For me, this gives `/var/db/mysql_secure`.
+
+The files will be automatically loaded if the grabber has access to this directory.
+If necessary then the directory can be specified with `--imdb-dir=/var/db/mysql_secure`.
+
+The files will need to be periodically (manually) downloaded and they
+will be automatically reloaded in to the database.
+
+* --use-imdb
+Use IMDB tables to supplement information, such as ratings (see also --prefer-imdb-rating), URL information, etc.
+* --imdb-db-type=s
+Local db type for storing IMDB data, default mysql (sqlite was far too slow for the large volumes of data).
+* --imdb-db=s
+Local db connection information, default is imdb@localhost which connects to the database called imdb locally.
+* --imdb-user=s
+Local user to use, default imdb.
+* --imdb-pass=s
+Local password to use, default imdb
+* --imdb-dir=s
+MySQL secure directory containing the imdb downloaded files. The grabber needs access to this directory.
+
 Extra Options
 -------------
 
@@ -193,6 +268,9 @@ An example is "--merge-split=5" to remove programmes that are only five minutes 
 * --artwork-max-width=n
 Prefer artwork with a width no larger than _n_. If no artwork exists at that size then larger artwork may be used.
 An example is "--artwork-max-width-720".
+* --prefer-imdb-rating
+If IMDB data is loaded and a rating exists for the programme then use it instead of the SchedulesDirect rating.
+The IMDB ratings tend to have a larger range of values so more easily differentiate average and above-average movies.
 * --channel-regex=regex and ---channel-exclude-regex=regex
 When outputting xmltv file, only output details for channels matching/not matching the _regex_. This allows the user to run the grabber multiple times and output extra days for important channels. See also --channel-short-days-regex.
 * --channel-short-days=n and --channel-short-days-exclude-regex=s
