@@ -5487,7 +5487,7 @@ sub DB_settingsGet
         exit(1);
       }
 
-    $sth->bind_col( 1, \$value, SQL_VARCHAR );
+    $sth->bind_col( 1, \$value);
 
     $sth->fetch();
 
