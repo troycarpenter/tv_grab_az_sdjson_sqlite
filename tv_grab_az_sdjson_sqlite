@@ -2015,7 +2015,7 @@ sub get_cache_object {
                       # We want the backend caching server to
                       # expire data even if we are not run.
                       expires_on_backend => 1,
-                      compress_threshold => get_option('cache-compression-threshold') // 1024 * 2,
+                      compress_threshold => get_option('cache-compression-threshold') // 1024 * 1,
                       # No point having an l1 cache since we currently
                       # cache data effectively by (station,start,stop) due to
                       # programmes having varying data such as "premiere".
@@ -2035,7 +2035,7 @@ sub get_cache_object_for_programme_details {
                       namespace => "pd." . get_cache_namespace(),
                       root_dir => cache_get_root_dir(),
                       expires_on_backend => 1,
-                      compress_threshold => get_option('cache-compression-threshold') // 1024 * 2,
+                      compress_threshold => get_option('cache-compression-threshold') // 1024 * 1,
                       # We use an l1 cache since programme details are often repeated.
                       # For example "Night News" will be on every day, and shows are
                       # repeated in morning and night.
@@ -2052,7 +2052,7 @@ sub get_cache_object_for_imdb {
                       namespace => "i." . get_cache_namespace(),
                       root_dir => cache_get_root_dir(),
                       expires_on_backend => 1,
-                      compress_threshold => get_option('cache-compression-threshold') // 1024 * 2,
+                      compress_threshold => get_option('cache-compression-threshold') // 1024 * 1,
                       # We use an l1 cache since programmes are frequently repeated.
                       # For example "Night News" will be on every day, and shows are
                       # repeated in morning and night.
