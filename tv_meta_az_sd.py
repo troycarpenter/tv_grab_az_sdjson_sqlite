@@ -88,7 +88,7 @@ class Tv_meta_az_sd(object):
 
     return None
 
-  def _artwork_from_dict(self, art, required_aspect):
+  def _artwork_from_dict(self, art, required_aspect, required_tier = None):
     if art is None:
         return
     uri = None
@@ -115,6 +115,14 @@ class Tv_meta_az_sd(object):
             text = details["text"]
             logging.debug("Trying %s" % details)
             logging.debug("URL %s %s %sx%s (%s/%s) text: %s"% (self._image_url(details["uri"]), details["category"], details["width"], details["height"], details["size"], details["aspect"], text)) # , details["caption"]))
+            if required_tier is not None:
+                # Movies do not have tiers so try/except.
+                try:
+                    tier = details["tier"]
+                    if tier not in required_tier:
+                        continue
+                except:
+                    pass
             category = details["category"]
             aspect = details["aspect"]
             if aspect in required_aspect:
@@ -138,12 +146,21 @@ class Tv_meta_az_sd(object):
         except Exception as e:
             logging.debug("Got exception %s during loop" % e)
 
-    logging.info("Finished loop with URLs uri: %s fallback_uri: %s req_aspect: %s" %(self._image_url(uri), self._image_url(fallback_uri), required_aspect))
+    logging.info("Finished loop with URLs uri: %s fallback_uri: %s req_aspect: %s req_tier: %s" %(self._image_url(uri), self._image_url(fallback_uri), required_aspect, required_tier))
     if uri is None: uri = fallback_uri
     if uri:
         return self._image_url(uri);
     else:
         return None
+
+  def _artwork_from_dict_with_fallback(self, art, required_aspect, required_tier = None):
+    """Try specific tier, fallback to any tier"""
+    art = self._artwork_from_dict(art, required_aspect, required_tier)
+    # No artwork in tier, so try any tier
+    if art is None and required_tier is not None:
+        logging.debug("Could not find any appropriate fanart at tier, trying any tier")
+        art = self._artwork_from_dict(art, required_aspect)
+    return art
 
   def fetch_details(self, args):
     logging.debug("Fetching with details %s " % args);
@@ -163,9 +180,11 @@ class Tv_meta_az_sd(object):
 
     res = self._fetch_from_sd(sd_programid)
     # Got a dict like {u'programID': u'MV000000000000', u'data': [{u'category
-    poster = self._artwork_from_dict(res, ['3x2', '2x3', '3x4'])
-    fanart = self._artwork_from_dict(res, ['16x9'])
-
+    # We prefer Series tier (instead of Season tier) since some programmes will have
+    # season posters with text such as "Season 9", even though we might be season 12.
+    # Whereas the Series tier is just a generic poster. So, prefer those.
+    poster = self._artwork_from_dict_with_fallback(res, ['3x2', '2x3', '3x4'], required_tier = ['Series'])
+    fanart = self._artwork_from_dict_with_fallback(res, ['16x9'], required_tier = ['Series'])
     logging.debug(fanart)
 
     logging.debug("URL poster=%s fanart=%s" % (poster, fanart))
