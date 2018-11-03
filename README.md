@@ -187,8 +187,7 @@ be larger.
 IMDB Support
 ------------
 
-Experimental IMDB support is included. Currently many steps needs to
-be performed manually, but they will be automated in the future.
+Experimental IMDB support is included.
 
 This feature adds details to the generated xmltv from IMDB such as
 ratings for shows, URL information, etc. This is useful since
@@ -243,8 +242,8 @@ For me, this gives `/var/db/mysql_secure`.
 The files will be automatically loaded if the grabber has access to this directory.
 If necessary then the directory can be specified with `--imdb-dir=/var/db/mysql_secure`.
 
-The files will need to be periodically (manually) downloaded and they
-will be automatically reloaded in to the database.
+The files will need to be periodically downloaded and they
+will be automatically reloaded in to the database. See --imdb-download option.
 
 * --use-imdb
 Use IMDB tables to supplement information, such as ratings (see also --prefer-imdb-rating), URL information, etc.
@@ -258,6 +257,8 @@ Local user to use, default imdb.
 Local password to use, default imdb
 * --imdb-dir=s
 MySQL secure directory containing the imdb downloaded files. The grabber needs access to this directory.
+* --imdb-download=s
+Periodically download imdb files. Options are "day", "week", "month", "quarter", "half", "year".
 
 Extra Options
 -------------
@@ -432,7 +433,7 @@ So I have a script that is run via crontab. It is similar to:
 # Interesting channels have this text in their name (separated by pipe symbol)
 CHREGEX="BBC|Movie|Film|Sony"
 
-COMMONARGS="--config-file sd.conf --merge-split=5 --artwork-max-width=720 --update-description-with-all --update-description-with-artwork --update-previously-shown-with-year --cache-driver=Redis --cache-ignore-unchanged-programmes --benchmark --cache-ignore-unchanged-programmes --no-channel-output"
+COMMONARGS="--config-file sd.conf --merge-split=5 --artwork-max-width=720 --update-description-with-all --update-description-with-artwork --update-previously-shown-with-year --cache-driver=Redis --cache-ignore-unchanged-programmes --benchmark --cache-ignore-unchanged-programmes --no-channel-output --use-imdb --prefer-imdb-rating --imdb-download=month"
 tv_grab_az_sdjson_sqlite --output out.xml --days 10 --channel-short-days=3 --channel-short-days-exclude-regex="$CHREGEX" $COMMONARGS
 mythfilldatabase --file --xmlfile out.xml --sourceid 1
 ```
