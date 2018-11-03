@@ -2271,13 +2271,27 @@ sub get_artwork_image {
     # Get episode artwork. For movies allow any artwork if there is no decent artwork such as poster.
     # For episodes if there is no decent images in EP then we try SH and finally any image from EP.
     my ($artURI, $width, $height);
-    if (($artURI, $width, $height) = $SD->getEpisodeImageFromArtwork($artwork, $pID !~ /^EP/)) {
+    my $is_episode = $pID =~ /^EP/;
+    my $allowAnyArt = !$is_episode;
+    if (($artURI, $width, $height) = $SD->getEpisodeImageFromArtwork($artwork, $allowAnyArt)) {
         return ($artURI, $width, $height);
-    } elsif (($artURI, $width, $height) = $SD->getEpisodeImageFromArtwork($supArt, 1)) {
+    }
+
+    if (($artURI, $width, $height) = $SD->getEpisodeImageFromArtwork($supArt, $allowAnyArt)) {
         return ($artURI, $width, $height);
-    } elsif (($artURI, $width, $height) = $SD->getEpisodeImageFromArtwork($artwork, 1)) {
+    }
+
+    return unless $is_episode;
+    # Episode, so try finding any artwork (not just preferred artwork).
+
+    if (($artURI, $width, $height) = $SD->getEpisodeImageFromArtwork($artwork, 1)) {
         # And if no good EP image and no good SH image then try any EP image. This
         # mostly picks up "Iconic" image.
+        # However, new episodes frequently don't have any artwork at all.
+        return ($artURI, $width, $height);
+    }
+    # So, if we can't find any artwork then try getting supplemental artwork.
+    if (($artURI, $width, $height) = $SD->getEpisodeImageFromArtwork($supArt, 1)) {
         return ($artURI, $width, $height);
     }
     return undef;
@@ -9392,6 +9406,14 @@ sub getEpisodeImageFromArtwork
               next unless $d;
               my $uri = $d->{uri};
               next unless $uri;
+              # Episodes/shows can have tiers. 'Season' can have
+              # season number in text on it, but metadata doesn't tell
+              # us _what_ season, so that means you see S9 text even
+              # if you are on season S13. So we prefer Series which
+              # is generic enough to apply to any episode.
+              my $tier = $d->{tier};
+              next if $tier && !$allowAnyArt && $tier ne 'Series';
+
               my $imgWidth = $d->{width};
               #my $aspect = $d->{aspect} // "N/A";
               #my $category = $d->{category};
