@@ -7187,7 +7187,7 @@ sub comment {
 
 sub startTag {
     my ($self, $tag, %tags) = @_;
-    $self->{str} .= "<$tag ";
+    $self->{str} .= "<$tag";
     $self->_add_attribs(%tags);
     $self->{str} .= '>';
     return $self;
@@ -7203,7 +7203,7 @@ sub _add_attribs {
     my ($self, %tags) = @_;
     for my $attr (sort keys %tags) {
         my $value = _escape_string($tags{$attr});
-        $self->{str} .= qq/$attr = "$value" /;
+        $self->{str} .= qq/ $attr = "$value"/;
     }
     return $self;
 }
@@ -7211,7 +7211,7 @@ sub _add_attribs {
 
 sub emptyTag {
     my ($self, $tag, %tags) = @_;
-    $self->{str} .= "<$tag ";
+    $self->{str} .= "<$tag";
     $self->_add_attribs(%tags);
     $self->{str} .= " />\n";
     return $self;
