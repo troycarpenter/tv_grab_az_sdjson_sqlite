@@ -1,5 +1,8 @@
 User-visible and notable changes. For new options, see the README.md.
 
+* 201811
+- Fix bug where cache expiry was calculated as absolute instead of relative (use redis-cli --flushdb to clear existing cache).
+
 * 201810
 - Prefer "poster" for fanart rather than wide art. This seems to be what media players prefer.
 - Initial IMDB support to add ratings and URLs to shows.

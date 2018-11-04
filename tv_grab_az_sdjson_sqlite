@@ -2131,10 +2131,11 @@ sub cache_get_maximum_expiry_for_programme {
         $prev_expiry = $expiry;
     }
 
+    # Expiry times are relative, not absolute, even when given as an epoch.
     if ($expires_at > $progtime_timet) {
-        return $progtime_timet;
+        return $progtime_timet - $now;
     } else {
-        return $expires_at;
+        return $expires_at - $now;
     }
 }
 
