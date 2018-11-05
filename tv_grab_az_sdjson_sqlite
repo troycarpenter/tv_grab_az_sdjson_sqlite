@@ -1418,9 +1418,10 @@ goto finalize if ($opt->{'download-only'});
 #
 # Start at the start
 #
-
-print (STDERR "Processing data and creating XMLTV output\n") if (!$quiet);
-
+if (!$quiet) {
+    my $now = DateTime->now;
+    print (STDERR "Processing data and creating XMLTV output at $now\n");
+}
 #
 # Create some mappings for processing programs
 #
@@ -1720,6 +1721,10 @@ if (!get_option('no-channel-output')) {
 
   if ($use_benchmark) {
       printf (STDERR "   xmltv generation took %s\n", Benchmark::timestr(Benchmark::timediff($t_end, $t_start))) if (!$quiet);
+  }
+  if (!$quiet) {
+    my $now = DateTime->now;
+    print (STDERR "Finished processing data and creating XMLTV output at $now\n");
   }
 
   $w->endTag('tv');
