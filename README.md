@@ -259,6 +259,10 @@ Local password to use, default imdb
 MySQL secure directory containing the imdb downloaded files. The grabber needs access to this directory.
 * --imdb-download=s
 Periodically download imdb files. Options are "day", "week", "month", "quarter", "half", "year".
+This will download in to the mysql secure directory (typically `/var/db/mysql_secure`) and
+you need write access to this directory. This can be done via `setfacl`, or (for single user
+systems), the tvheadend process could be given write access to the directory via
+`chgrp tvheadend /var/db/mysql_secure && chmod g+rwx /var/db/mysql_secure`.
 
 Extra Options
 -------------
