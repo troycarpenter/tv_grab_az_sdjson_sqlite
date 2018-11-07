@@ -205,7 +205,13 @@ An example of the additional IMDB fields in the generated file:
 Note that many lookups will fail primarily because tv guides are full of
 local shows, or have programmes that are old where there are discrepencies
 on when the show was made or how it should be spelled (such as "Quincy",
-"Quincy, M.E.", and "Quincy M.E.").
+"Quincy, M.E.", and "Quincy M.E."). Although we could handle more
+special cases, that would unfortunately slow down the majority of lookups
+that work.
+
+It is recommended that the redis cache server is enabled to use imdb
+since it will allow caching of mapping information, see
+"Local Caching" options such as "--cache-driver=Redis".
 
 The IMDB support needs mysql server running since sqlite was too slow
 for the large volumes of data that needs to be frequently imported.
