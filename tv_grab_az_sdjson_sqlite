@@ -7260,6 +7260,7 @@ sub new {
               table => "imdb_title",
               file => "title.basics",
               columns => "tconst,titleType,primaryTitle,originalTitle,isAdult,startYear,endYear,runtimeMinutes,genres",
+              calc_pt_crc => 1,
              },
              {
               table => "imdb_episode",
@@ -7283,18 +7284,18 @@ sub _update_schema {
     my ($self) = @_;
     my $db = $self->{db};
 
-    $db->do("create table if not exists imdb_settings (tag varchar(100) primary key not null, value text)");
+    my $charset = "CHARACTER SET latin1 COLLATE latin1_bin";
+    $db->do("create table if not exists imdb_settings (tag varchar(100) $charset primary key not null, value text $charset)");
     my $version = $db->selectrow_array("select value from imdb_settings where tag='version'");
     if (!$version) {
         my @sql = (
                    # Need runtimeMinutes as an int since one show says it is 125156 minutes long.
-                   "create table if not exists imdb_title(tconst varchar(12) primary key not null, titleType text, primaryTitle text NOT NULL, originalTitle text, isAdult boolean, startYear smallint unsigned, endYear smallint unsigned, runtimeMinutes mediumint unsigned, genres text, downloaded datetime default CURRENT_TIMESTAMP COLLATE utf8_general_ci)",
-                   "create index idx_i_t on imdb_title(primaryTitle(32), startYear)", # Average length of title is 19; max 408, so 32 should be more than enough.
-
-                   "create table if not exists imdb_episode(tconst varchar(12) not null, parentTconst varchar(12) not null, seasonNumber tinyint unsigned, episodeNumber mediumint unsigned, downloaded datetime default CURRENT_TIMESTAMP, CONSTRAINT pk_i_e PRIMARY KEY (tconst, parentTconst))",
+                   "create table if not exists imdb_title(tconst varchar(12) $charset primary key not null, titleType text, primaryTitle text NOT NULL, originalTitle text, isAdult boolean, startYear smallint unsigned, endYear smallint unsigned, runtimeMinutes mediumint unsigned, genres text, pt_crc int unsigned, downloaded datetime default CURRENT_TIMESTAMP COLLATE utf8_general_ci)",
+                   "create index idx_i_c_y on imdb_title(pt_crc, startYear)", # Average length of title is 19; max 408, so pt_crc should be faster match
+                   "create table if not exists imdb_episode(tconst varchar(12) $charset not null, parentTconst varchar(12) $charset not null, seasonNumber tinyint unsigned, episodeNumber mediumint unsigned, downloaded datetime default CURRENT_TIMESTAMP, CONSTRAINT pk_i_e PRIMARY KEY (tconst, parentTconst), FOREIGN KEY(tconst) REFERENCES imdb_title(tconst) ON DELETE CASCADE, FOREIGN KEY(parentTconst) REFERENCES imdb_title(tconst) ON DELETE CASCADE)",
                    "create unique index idx_i_e on imdb_episode(episodeNumber,seasonNumber,tconst)",
 
-                   "create table if not exists imdb_ratings (tconst varchar(12) primary key not null, averageRating numeric, numVotes integer,  parentTconst varchar(12), downloaded datetime default CURRENT_TIMESTAMP)",
+                   "create table if not exists imdb_ratings (tconst varchar(12) $charset primary key not null, averageRating numeric, numVotes integer,  parentTconst varchar(12) $charset, downloaded datetime default CURRENT_TIMESTAMP, FOREIGN KEY(tconst) REFERENCES imdb_title(tconst) ON DELETE CASCADE)",
 
                   );
         for (@sql) {
@@ -7345,8 +7346,8 @@ sub find_details_for_episode {
     if ($title && $subtitle) {
         # We don't check season/episode since exact match of title/subtitle is usually good enough.
         # and E.seasonNumber=? and E.episodeNumber=?
-        state $stmt = $self->{db}->prepare_cached("select TE.tconst,TE.parentTconst from imdb_title S, imdb_title E, imdb_episode TE where S.primaryTitle=? and E.primaryTitle=? and TE.parentTconst = S.tconst and TE.tconst = E.tconst and E.startYear=?");
-        ($tconst, $parentTconst) = $self->_find_id($stmt, $title, $subtitle, $year);
+        state $stmt = $self->{db}->prepare_cached("select TE.tconst,TE.parentTconst from imdb_title S, imdb_title E, imdb_episode TE where S.primaryTitle=? and E.primaryTitle=? and TE.parentTconst = S.tconst and TE.tconst = E.tconst and E.startYear=? and S.pt_crc=crc32(?) and E.pt_crc=crc32(?)");
+        ($tconst, $parentTconst) = $self->_find_id($stmt, $title, $subtitle, $year, $title, $subtitle);
         # Could not find id for episode based on subtitle.
 
         if (!$tconst && $season && $episode) {
@@ -7364,8 +7365,8 @@ sub find_details_for_episode {
             # and this isn't fixed in the "akas" table.
             #
             # Try by season/episode and approx match of subtitle.
-            state $stmt = $self->{db}->prepare_cached("select TE.tconst,TE.parentTconst from imdb_title S, imdb_title E, imdb_episode TE  where S.primaryTitle=? and TE.seasonNumber=? and TE.episodeNumber=? and TE.parentTconst = S.tconst and TE.tconst=E.tconst and soundex(E.primaryTitle) = soundex(?) and E.startYear=?");
-            ($tconst, $parentTconst) = $self->_find_id($stmt, $title, $subtitle, $season, $episode, $year);
+            state $stmt = $self->{db}->prepare_cached("select TE.tconst,TE.parentTconst from imdb_title S, imdb_title E, imdb_episode TE  where S.primaryTitle=? and TE.seasonNumber=? and TE.episodeNumber=? and TE.parentTconst = S.tconst and TE.tconst=E.tconst and soundex(E.primaryTitle) = soundex(?) and E.startYear=? and S.pt_crc=crc32(?)");
+            ($tconst, $parentTconst) = $self->_find_id($stmt, $title, $subtitle, $season, $episode, $year, $title);
         }
     }
 
@@ -7381,8 +7382,8 @@ sub find_details_for_show {
     return unless $title && $year;
     # Currently ignore "originalTitle=$title"
 
-    state $stmt = $self->{db}->prepare_cached("select tconst from imdb_title where primaryTitle=? and startYear=? and titleType like 'tv%'");
-    my $tconst = $self->_find_id($stmt, $title, $year);
+    state $stmt = $self->{db}->prepare_cached("select tconst from imdb_title where pt_crc=crc32(?) and primaryTitle=? and startYear=? and titleType like 'tv%'");
+    my $tconst = $self->_find_id($stmt, $title, $title, $year);
     my $rating = $self->_find_rating_by_tconst($tconst);
     # undef for imdbid since we are a generic show (series).
     return ($rating, undef, $tconst);
@@ -7392,8 +7393,8 @@ sub find_details_for_movie {
     my ($self, $title, $year) = @_;
     return unless $title && $year;
 
-    my $stmt = $self->{db}->prepare_cached("select tconst from imdb_title where primaryTitle=? and startYear=? and titleType in('movie', 'tvmovie', 'tvShort')");
-    my $tconst = $self->_find_id($stmt, $title, $year);
+    my $stmt = $self->{db}->prepare_cached("select tconst from imdb_title where pt_crc=crc32(?) and primaryTitle=? and startYear=? and titleType in('movie', 'tvmovie', 'tvShort')");
+    my $tconst = $self->_find_id($stmt, $title, $title, $year);
 
     return $self->_find_rating_by_tconst($tconst);
 }
@@ -7411,7 +7412,11 @@ sub _import_file {
     print STDERR "Import $path in to table $table\n" unless $quiet;
     my $ignore = $entry->{mode} // 'ignore';
     my $columns = $entry->{columns};
-    $db->do("load data infile ? $ignore into table $table ignore 1 lines ($columns) set downloaded = current_timestamp", {}, $path);
+    # crc32 is good enough since it is much faster to calculate than
+    # md5/sha1 and we always need to string compare against
+    # primaryTitle anyway.
+    my $extra = ($entry->{calc_pt_crc}) ? ",pt_crc=crc32(primaryTitle)" : "";
+    $db->do("load data infile ? $ignore into table $table ignore 1 lines ($columns) set downloaded = current_timestamp$extra", {}, $path);
     $db->do("replace into imdb_settings(tag, value) values(?,?)", {}, $tag, $mtime);
     $db->commit();
     print STDERR "Finished import $path in to table $table\n" unless $quiet;
