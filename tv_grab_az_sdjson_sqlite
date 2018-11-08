@@ -7460,7 +7460,6 @@ sub _download_file {
     my $url = "$base_url$file.tsv.gz";
     my $dl_file = "$path.gz";
     my $output_tmp_file = "$path.tmp";
-    print STDERR "Downloading imdb file for $file from $url in to $output_tmp_file\n" unless $quiet;
 
     use IPC::Run3;
     # We use wget instead of internal LWP purely because the files are
@@ -7469,12 +7468,24 @@ sub _download_file {
     #
     # We deliberately fetch in to the same secure directory (not TMPDIR)
     # since modern distributions make TMPDIR small.
-    my @wget = ("wget", "--output-document", "$output_tmp_file", $url);
-    run3 \@wget, \undef;
-    if ($? || !-s $output_tmp_file) {
-        print STDERR" Failed to download from $url in to $output_tmp_file\n";
-        unlink $output_tmp_file if -e $output_tmp_file;
-        return;
+    #
+    # We also manually retry since we sometimes get "unable to resolve
+    # host address" errors, and the "--tries" option on wget doesn't
+    # retry for these.
+    my $tries = 0;
+    while (++$tries) {
+        print STDERR "Downloading imdb file for $file from $url in to $output_tmp_file\n" unless $quiet;
+        my @wget = ("wget", "--output-document", "$output_tmp_file", $url);
+        run3 \@wget, \undef;
+        if ($? || !-s $output_tmp_file) {
+            print STDERR" Failed to download from $url in to $output_tmp_file, exit status $?\n";
+            unlink $output_tmp_file if -e $output_tmp_file;
+            return if $tries > 3;
+            print STDERR "Will retry download after a short pause..." unless $quiet;
+            sleep 1;
+        } else {
+            last;
+        }
     }
 
     # Now the file is fully downloaded, we rename it to the .gz file.
