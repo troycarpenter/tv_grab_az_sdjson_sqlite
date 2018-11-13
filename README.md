@@ -1,6 +1,6 @@
 # tv_grab_az_sdjson_sqlite / tv_meta_az_sd.py
 XMLTV grabber for Schedules Direct JSON service, optimized for large numbers
-of channels, with local fast caching of xmltv output.
+of channels, with local fast caching of xmltv output, and IMDB support.
 Also includes a Tvheadend metadata program for populating fanart for Kodi.
 
 Place the tv_grab_az_sdjson_sqlite and tv_meta_az_sd.py in the same location
@@ -209,7 +209,7 @@ on when the show was made or how it should be spelled (such as "Quincy",
 special cases, that would unfortunately slow down the majority of lookups
 that work.
 
-It is recommended that the redis cache server is enabled to use imdb
+It is recommended that the redis cache server is enabled to use IMDB
 since it will allow caching of mapping information, see
 "Local Caching" options such as "--cache-driver=Redis".
 
@@ -236,7 +236,8 @@ over the SchedulesDirect ratings.
 
 The IMDB datasets can be downloaded from https://www.imdb.com/interfaces/
 You need the `title.basics.tsv.gz`, `title.episode.tsv.gz`, and
-`title.ratings.tsv.gz`.
+`title.ratings.tsv.gz` (see `--imdb-download` for option to automatically
+download the files if we have write access to the mysql secure directory).
 
 These files should be uncompressed and placed in to your mysql
 "secure" directory. This is because modern mysql locks down
@@ -246,7 +247,8 @@ bulk loading of data.
 For me, this gives `/var/db/mysql_secure`.
 
 The files will be automatically loaded if the grabber has access to this directory.
-If necessary then the directory can be specified with `--imdb-dir=/var/db/mysql_secure`.
+If necessary then the directory can be specified with `--imdb-dir=xxx`, the default
+is `/var/db/mysql_secure`.
 
 The files will need to be periodically downloaded and they
 will be automatically reloaded in to the database. See --imdb-download option.
@@ -262,13 +264,16 @@ Local user to use, default imdb.
 * --imdb-pass=s
 Local password to use, default imdb
 * --imdb-dir=s
-MySQL secure directory containing the imdb downloaded files. The grabber needs access to this directory.
+MySQL secure directory containing the IMDB downloaded files. The grabber needs access to this directory.
+Default is `/var/db/mysql_secure`.
 * --imdb-download=s
-Periodically download imdb files. Options are "day", "week", "month", "quarter", "half", "year".
+Periodically download IMDB files. Options are "day", "week", "month", "quarter", "half", "year".
 This will download in to the mysql secure directory (typically `/var/db/mysql_secure`) and
 you need write access to this directory. This can be done via `setfacl`, or (for single user
 systems), the tvheadend process could be given write access to the directory via
 `chgrp tvheadend /var/db/mysql_secure && chmod g+rwx /var/db/mysql_secure`.
+Since IMDB normally has details for future episodes/movies already, it's recommended
+to not download more frequently than every month.
 
 Extra Options
 -------------
