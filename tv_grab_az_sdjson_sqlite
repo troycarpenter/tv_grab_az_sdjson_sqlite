@@ -46,6 +46,10 @@
 #
 # 2017/11/30 - 1.35 - Populate thetvdb episode-num.
 # 2017/10/11 - 1.34 - download artwork.
+# 2018/11/03 - 1.59 - additional protection against bad data
+# 2018/10/30 - 1.58 - initial protections against bad data
+# 2018/09/15 - 1.57 - support lineup selection by transmitter
+# 2018/09/15 - 1.56 - enhance obtainAvailble to use uri
 # 2018/09/14 - 1.55 - support explicit lineup name for --manage-lineup add
 # 2018/09/13 - 1.54 - revise previously-shown (new is new and no supplemental)
 # 2018/09/05 - 1.53 - multi-lineup plumbing - configure
@@ -6074,8 +6078,18 @@ sub manageLineups
         $prompt .= "======================================================================\n";
         for my $l (@{$lineups})
           {
-            # my $desc = "$l->{'name'} ($l->{'transport'} $l->{'location'})";
-            my $desc = ($l->{'name'} // "N/A") . " " . ($l->{'transport'} // "N/A") . " " . ($l->{'location'} // "N/A");
+            my $desc = '';
+            if (defined($l->{'isDeleted'}) && $l->{'isDeleted'})
+              {
+                $desc = "DELETED LINEUP";
+              }
+            else
+              {
+                my $name = $l->{'name'} || 'None';
+                my $transport = $l->{'transport'} || 'None';
+                my $location = $l->{'location'} || 'None';
+                $desc = "$name ($transport $location)";
+              }
             $prompt .= sprintf("%-20s %s\n", $l->{'lineup'}, $desc);
           }
 
@@ -6161,6 +6175,52 @@ sub manageLineups
             my $cindex = askChoice("\nSelect the country code for the new lineup (ctrl-D to skip)", undef, @choices);
             next if (!defined($cindex));
 
+            # check if we can offer transmitter selection
+            my $transmitters = $SD->obtainAvailable('DVB-T', '/' . @{$clist}[$cindex]->{'shortName'});
+            if (defined($transmitters) && (ref($transmitters) eq 'HASH') && (scalar($transmitters) != 0))
+              {
+                my $selectXMTR = ask_boolean("\nDo you want to select by transmitter?",0);
+                next if (!defined($selectXMTR));
+                if ($selectXMTR)
+                  {
+                    my @choices = ();
+                    my $aprompt = '';
+
+                    foreach my $location(sort(keys(%{$transmitters})))
+                      {
+                        my $lineup = $transmitters->{$location};
+
+                        if (scalar(@choices) < 10)
+                          {
+                            push (@choices, [ "$lineup", sprintf (" %-20s %s", $lineup, "$location") ]);
+                          }
+                        else
+                          {
+                            push (@choices, [ "$lineup", sprintf ("%-20s %s", $lineup, "$location") ]);
+                          }
+                      }
+
+                    $aprompt  = "\n";
+                    $aprompt .= "Select one of the following lineups to add to your Schedules Direct account (ctrl-D to skip)\n";
+                    $aprompt .= "    Lineup ID            Description\n";
+                    $aprompt .= "    ======================================================================\n";
+
+                    my $lineup_to_add = askChoice($aprompt, undef, @choices);
+                    next if (!defined($lineup_to_add));
+
+                    if ($SD->addLineup($lineup_to_add))
+                      {
+                        $prompt .= "Lineup $lineup_to_add added\n";
+                      }
+                    else
+                      {
+                        $prompt .= "Lineup addition of $lineup_to_add failed: " . $SD->ErrorString() . "\n";
+                      }
+
+                    next;
+                  }
+              }
+
             my $country_code = @{$clist}[$cindex]->{'shortName'};
             my $postal_code_regex = @{$clist}[$cindex]->{'postalCode'};
             $postal_code_regex =~ s/^\/(.*)\/[a-z]*$/\^$1\$/;    # Adjust for perl
@@ -6216,8 +6276,8 @@ sub manageLineups
                 my $aprompt = '';
                 for (my $i = 0; $i < scalar(@{$headends}); $i++)
                   {
-                    $transport = @{$headends}[$i]->{'transport'};
-                    $location = @{$headends}[$i]->{'location'};
+                    $transport = @{$headends}[$i]->{'transport'} || 'None';
+                    $location = @{$headends}[$i]->{'location'} || 'None';
                     foreach my $lu (@{$headends}[$i]->{'lineups'})
                       {
                         for my $l (@{$lu})
@@ -6270,7 +6330,10 @@ sub manageLineups
                   }
                 else
                   {
-                    $desc = "$l->{'name'} ($l->{'transport'} $l->{'location'})";
+                    my $name = $l->{'name'} || 'None';
+                    my $transport = $l->{'transport'} || 'None';
+                    my $location = $l->{'location'} || 'None';
+                    $desc = "$name ($transport $location)";
                   }
                 push (@choices, [ $l->{'lineup'}, sprintf("%-20s %s", $l->{'lineup'}, $desc) ]);;
               }
@@ -6356,7 +6419,10 @@ sub manageLineups
             @choices = ();
             for my $l (@{$lineups})
               {
-                my $desc = "$l->{'name'} ($l->{'transport'} $l->{'location'})";
+                my $name = $l->{'name'} || 'None';
+                my $transport = $l->{'transport'} || 'None';
+                my $location = $l->{'location'} || 'None';
+                my $desc = "$name ($transport $location)";
                 push (@choices, [ $l->{'lineup'}, sprintf("%-20s %s", $l->{'lineup'}, $desc) ]);;
               }
 
@@ -9028,6 +9094,12 @@ sub obtainAvailable
 
     my $type = shift;
 
+    my $path = shift;
+
+    $type = '' if (!defined($type));
+
+    $path = '' if (!defined($path));
+
     $self->_resetError;
 
     if (!$self->isOnline)
@@ -9046,11 +9118,16 @@ sub obtainAvailable
         return $return;
       }
 
-    $type = '' if (!defined($type));
+    if (($path ne '') && ($type eq ''))
+      {
+        $return = undef;
+        $self->_setErrorString("obtainAvailable request is not valid (type=$type, path=$path)");
+        $self->_CroakOrCarp;
+        print (STDERR "DEBUG: Returning from " . (caller(0))[3] . " with: \n" . Data::Dumper->new([$return])->Pad('DEBUG:   ')->Useqq(1)->Dump) if ($self->{'Debug'});
+        return $return;
+      }
 
-    $type = uri_escape($type);
-
-    my $request = HTTP::Request->new(GET => "$self->{'RESTUrl'}/available/$type");
+    my $request = HTTP::Request->new(GET => "$self->{'RESTUrl'}/available");
 
     $request->header('Token' => "$self->{'_Token'}");
 
@@ -9103,8 +9180,111 @@ sub obtainAvailable
         return $return;
       }
 
-    $return = $r;
+    if ($type eq '')
+      {
+        $return = $r;
+        print (STDERR "DEBUG: Returning from " . (caller(0))[3] . " with: \n" . Data::Dumper->new([$return])->Pad('DEBUG:   ')->Useqq(1)->Dump) if ($self->{'Debug'});
+        return $return;
+      }
 
+    if (ref($r) ne 'ARRAY')
+      {
+        $return = undef;
+        $self->_setErrorString("HTTP response content was malformed (not an array)");
+        $self->_CroakOrCarp;
+        print (STDERR "DEBUG: Returning from " . (caller(0))[3] . " with: \n" . Data::Dumper->new([$return])->Pad('DEBUG:   ')->Useqq(1)->Dump) if ($self->{'Debug'});
+        return $return;
+      }
+
+    foreach my $e(@{$r})
+      {
+        if (ref($e) ne 'HASH')
+          {
+            $return = undef;
+            $self->_setErrorString("HTTP response content was malformed (not an array of hashes)");
+            $self->_CroakOrCarp;
+            print (STDERR "DEBUG: Returning from " . (caller(0))[3] . " with: \n" . Data::Dumper->new([$return])->Pad('DEBUG:   ')->Useqq(1)->Dump) if ($self->{'Debug'});
+            return $return;
+          }
+        if (defined($e->{'type'}) && ($e->{'type'} eq "$type"))
+          {
+            if (defined($e->{'uri'}))
+              {
+                my $uri = $e->{'uri'};
+
+                $uri =~ s/\/\{.*?\}$//;        # Bad adjustment?
+
+                $request = HTTP::Request->new(GET => $self->uriResolve($uri) . "$path");
+
+                $request->header('Token' => "$self->{'_Token'}");
+
+                print (STDERR "DEBUG:   HTTP request:\n" . Data::Dumper->new([$request])->Pad('DEBUG:   ')->Useqq(1)->Dump) if ($self->{'Debug'});
+
+                $response = $self->{'_LWP'}->request($request);
+
+                print (STDERR "DEBUG:   HTTP response:\n" . Data::Dumper->new([$response])->Pad('DEBUG:   ')->Useqq(1)->Dump) if ($self->{'Debug'});
+
+                $responseCode = $response->code();
+                $responseContent = $response->decoded_content();
+
+                print (STDERR "DEBUG:   HTTP decoded response content:\n" . Data::Dumper->new([$responseContent])->Pad('DEBUG:   ')->Useqq(1)->Dump) if ($self->{'Debug'});
+
+                if ($responseCode != 200)
+                  {
+                    $return = undef;
+                    $self->_setErrorString("HTTP response code was not successful ($responseCode)");
+                    $self->_CroakOrCarp;
+                    print (STDERR "DEBUG: Returning from " . (caller(0))[3] . " with: \n" . Data::Dumper->new([$return])->Pad('DEBUG:   ')->Useqq(1)->Dump) if ($self->{'Debug'});
+                    return $return;
+                  }
+
+                if (!defined($responseContent))
+                  {
+                    $return = undef;
+                    $self->_setErrorString("HTTP response content could not be decoded");
+                    $self->_CroakOrCarp;
+                    print (STDERR "DEBUG: Returning from " . (caller(0))[3] . " with: \n" . Data::Dumper->new([$return])->Pad('DEBUG:   ')->Useqq(1)->Dump) if ($self->{'Debug'});
+                    return $return;
+                  }
+
+                if ($responseContent eq '')
+                  {
+                    $return = undef;
+                    $self->_setErrorString("HTTP response content was empty");
+                    $self->_CroakOrCarp;
+                    print (STDERR "DEBUG: Returning from " . (caller(0))[3] . " with: \n" . Data::Dumper->new([$return])->Pad('DEBUG:   ')->Useqq(1)->Dump) if ($self->{'Debug'});
+                    return $return;
+                  }
+
+                $r = eval { $self->{'_JSON'}->convert_blessed->decode($responseContent) };
+
+                if (!defined($r))
+                  {
+                    $return = undef;
+                    $self->_setErrorString("HTTP response content was not parseable: $responseContent");
+                    $self->_CroakOrCarp;
+                    print (STDERR "DEBUG: Returning from " . (caller(0))[3] . " with: \n" . Data::Dumper->new([$return])->Pad('DEBUG:   ')->Useqq(1)->Dump) if ($self->{'Debug'});
+                    return $return;
+                  }
+
+                $return = $r;
+                print (STDERR "DEBUG: Returning from " . (caller(0))[3] . " with: \n" . Data::Dumper->new([$return])->Pad('DEBUG:   ')->Useqq(1)->Dump) if ($self->{'Debug'});
+                return $return;
+              }
+            else
+              {
+                $return = undef;
+                $self->_setErrorString("HTTP response content was malformed (uri not specified in available response)");
+                $self->_CroakOrCarp;
+                print (STDERR "DEBUG: Returning from " . (caller(0))[3] . " with: \n" . Data::Dumper->new([$return])->Pad('DEBUG:   ')->Useqq(1)->Dump) if ($self->{'Debug'});
+                return $return;
+              }
+          }
+      }
+
+    $return = undef;
+    $self->_setErrorString("HTTP response did not match type=$type");
+    $self->_CroakOrCarp;
     print (STDERR "DEBUG: Returning from " . (caller(0))[3] . " with: \n" . Data::Dumper->new([$return])->Pad('DEBUG:   ')->Useqq(1)->Dump) if ($self->{'Debug'});
     return $return;
   }
