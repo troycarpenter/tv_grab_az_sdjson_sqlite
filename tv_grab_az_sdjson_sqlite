@@ -46,6 +46,7 @@
 #
 # 2017/11/30 - 1.35 - Populate thetvdb episode-num.
 # 2017/10/11 - 1.34 - download artwork.
+# 2018/11/10 - 1.60 - include subscription info in additional paths
 # 2018/11/03 - 1.59 - additional protection against bad data
 # 2018/10/30 - 1.58 - initial protections against bad data
 # 2018/09/15 - 1.57 - support lineup selection by transmitter
@@ -3699,6 +3700,26 @@ sub configureGrabber
     return $result;
   }
 
+sub log_sd_expiry {
+    my $expiry = $SD->accountExpiry;
+    if (!defined($expiry))
+      {
+        print (STDERR "Unable to obtain the account expiration date: " . $SD->ErrorString . "\n");
+        exit(1);
+      }
+    my $dataLastUpdated = $SD->obtainDataLastUpdated;
+    if (!defined($dataLastUpdated))
+      {
+        print (STDERR "Unable to obtain the Schedules Direct data last updated: " . $SD->ErrorString . "\n");
+        exit(1);
+      }
+    my $expiryDateTime = DateTime::Format::ISO8601->parse_datetime($expiry);
+    my $dataLastUpdatedDateTime = DateTime::Format::ISO8601->parse_datetime($dataLastUpdated);
+
+    print (STDERR "   Schedules Direct account expires on " . $expiryDateTime . "\n") if (!$quiet);
+    print (STDERR "   Schedules Direct data last updated on " . $dataLastUpdatedDateTime . "\n") if (!$quiet);
+}
+
 sub lineupFetchAndValidate {
     my ($conf) = @_;
     my $fetchLineupRequired = 0;
@@ -3710,6 +3731,7 @@ sub lineupFetchAndValidate {
       {
           print (STDERR "Obtaining authentication token for Schedules Direct\n") if (!$quiet);
         SD_login();
+        log_sd_expiry();
         $fetchLineupRequired |= SD_isLineupFetchRequired($conf->{lineup});
 
         if ($fetchLineupRequired)
@@ -3993,6 +4015,7 @@ sub listLineups
     check_cache_clear();
     print (STDERR "Obtaining authentication token for Schedules Direct\n") if ($download && !$quiet);
     SD_login() if ($download);
+    log_sd_expiry();
 
     #
     # Optimizing lineup download is simply not worth the effort
