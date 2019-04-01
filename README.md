@@ -319,6 +319,10 @@ This is useful since many movies have multiple ratings but many systems only tak
 The default is based on US ratings, with fallbacks to other countries.
 * --use-category-for-keyword
 Instead of outputting keyword tags, output category tags instead. Useful for programs that cannot parse keywords.
+* --update-category-with-grabber
+Add an xmltv tag to the programme's categories. This allows the user to schedule programmes that
+have a category of 'xmltv' (and, say, a title of "Bob") and so avoid recording other OTA channels
+which have provided EIT details that would otherwise match the recording rule.
 
 Extra Options for Updating Description
 --------------------------------------

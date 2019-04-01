@@ -1,4 +1,6 @@
 User-visible and notable changes. For new options, see the README.md.
+* 201903
+- New option 'update-category-with-grabber' to add an 'xmltv' tag to categories in programmes. See README.md for details.
 
 * 201811
 - Fix bug where cache expiry was calculated as absolute instead of relative (use redis-cli --flushdb to clear existing cache).

@@ -152,7 +152,7 @@ my $RFC2838_COMPLIANT          = 1;            # RFC2838 compliant station ids, 
                                                # validate even though the docs say "SHOULD" not "MUST"
 
 # Has to be a "CVS" Id string for XMLTV::Options.
-my $SCRIPT_VERSION             = '$Id: tv_grab_az_sdjson_sqlite,v 1.55 3976d0 2018/11/12 01:19:00 gtb Exp ed $';
+my $SCRIPT_VERSION             = '$Id: tv_grab_az_sdjson_sqlite,v 1.56 3976d0 2019/04/01 01:19:00 gtb Exp ed $';
 my $SCRIPT_URL                 = 'https://github.com/azlm8t/tv_grab_zz_sdjson_sqlite';
 my $SCRIPT_NAME                = basename("$0");
 my $SCRIPT_NAME_DIR            = dirname("$0");
@@ -319,6 +319,7 @@ my %catmap_minor = (
                            channel-short-days=n
                            channel-short-days-exclude-regex=s
                            use-category-for-keyword!
+                           update-category-with-grabber!
                            update-description-with-all!
                            update-description-with-credits!
                            update-description-with-categories!
@@ -3272,7 +3273,13 @@ sub write_programme_details {
         $w->raw($w2->to_string());
 	$w->dataElement('date', $year) if $year;
         $w->dataElement('category', $mythtv_category) if $mythtv_category;
-        foreach my $category (sort {$categories->{$a} <=> $categories->{$b}} (keys %{$categories}))
+        # Adding an 'xmltv' category makes it easier to add recording rules where
+        # we only want to record if we have good xmltv data, not OTA data so can
+        # match against the xmltv category. We add it here (after writing the
+        # description) since no point having 'xmltv' in every programme's description
+        # if 'update-description-with-category' is enabled.
+        $categories->{xmltv} = 1 if get_option('update-category-with-grabber');
+        foreach my $category (sort keys %{$categories})
           {
             $w->dataElement('category', $category);
           }
