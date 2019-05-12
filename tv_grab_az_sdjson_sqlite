@@ -7643,7 +7643,10 @@ sub download {
     # Output directory does not exist? Then return
     # since mysql installs would have the directory
     # already created.
-    return unless -e $dir;
+    if (!-e $dir) {
+        print STDERR "mysql secure directory does not exist: $dir\n";
+        return;
+    }
     my $entries = $self->{entry};
     for my $entry (@$entries) {
         $self->_download_file($entry, $dir, $dl);
