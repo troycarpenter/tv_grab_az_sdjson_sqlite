@@ -320,7 +320,6 @@ my %catmap_minor = (
                            download-only
                            no-download
                            no-prune
-                           no-output-bad-channel-details
                            no-channel-output
                            merge-split=n
                            artwork-max-width=n
@@ -328,6 +327,7 @@ my %catmap_minor = (
                            channel-exclude-regex=s
                            channel-short-days=n
                            channel-short-days-exclude-regex=s
+                           output-bad-channel-details=s
                            use-category-for-keyword!
                            update-category-with-grabber!
                            update-description-with-all!
@@ -1707,7 +1707,7 @@ sub output_bad_channel_list {
     }
     print STDERR "Got $num_good channels with schedule data for the requested days.\n";
     print STDERR "Got $num_bad channels without any schedule data for the requested days.\n";
-    if ($num_bad && !$opt->{'no-output-bad-channel-details'}) {
+    if ($num_bad && is_correct_day_for_opt('output-bad-channel-details')) {
         print STDERR "\t$_\n" for (sort @bad_list);
     }
 }
@@ -2319,6 +2319,31 @@ sub print_and_shuffle_programmes {
 sub get_option {
     my ($name) = @_;
     return $opt->{$name} // $conf->{$name};
+}
+
+# Determine if it's the correct day for running an option.
+# The option value should be one of:
+# - never
+# - always|day|daily
+# - weekly
+# - monthly
+# - quarter
+# - half
+# - year
+sub is_correct_day_for_opt  {
+    my ($name, $default) = @_;
+    my $opt = get_option($name) // $default;
+    return unless $opt;
+    return if $opt eq 'never';
+    return 1 if $opt eq 'always' or $opt =~ /^day|^daily/;
+
+    my $now = DateTime->now;
+    return 1 if $opt =~ /^week/    && $now->day_of_week == 1;
+    return 1 if $opt =~ /^month/   && $now->day == 1;
+    return 1 if $opt =~ /^quarter/ && $now->day == 1 && ($now->month-1)%4 == 0;
+    return 1 if $opt =~ /^half/    && $now->day == 1 && ($now->month-6)%6 == 0;
+    return 1 if $opt =~ /^year/    && $now->day == 1 && $now->month == 0;
+    return;
 }
 
 # Get order that content rating should be sorted.

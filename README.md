@@ -300,15 +300,16 @@ and all the other channels are then marked as boring.
 For example: --channel-short-days=3 --channel-short-days-exclude-regex="BBC|Movie|PBS"
 * --no-download
 Do not download the schedule, use database cache only.
-* --no-output-bad-channel-details
-SchedulesDirect frequently has channels for which it no longer publishes guide data.
-So we now output a list of these channels so end clients can be updated. Use this option
-to avoid a detailed list of these bad channels being displayed.
 * --no-prune
 Do not prune the database of old schedules. Useful if running multiple times.
 * --no-channel-output
 Do not output the channels information in the xmltv file. This can be useful if you have hundreds of
 channels that never change since it avoids the PVR re-processing them on every run.
+* --output-bad-channel-details=[never|always|week|month|quarter|half|year]
+SchedulesDirect frequently has channels for which it no longer publishes guide data.
+So we now output a list of these channels so end clients can be updated. Use this option
+to avoid a detailed list of these bad channels being displayed.
+The default is never.
 * --force-download
 Erase schedules from DB and force a complete download of data.
 * --force-vacuum
