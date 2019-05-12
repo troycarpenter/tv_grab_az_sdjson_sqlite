@@ -244,7 +244,8 @@ These files should be uncompressed and placed in to your mysql
 bulk loading of data.
 `mysql -p -e "SHOW VARIABLES WHERE Variable_Name = 'secure_file_priv'"`
 
-For me, this gives `/var/db/mysql_secure`.
+For me, this gives `/var/db/mysql_secure` or `/var/lib/mysql-files/` depending
+on the server.
 
 The files will be automatically loaded if the grabber has access to this directory.
 If necessary then the directory can be specified with `--imdb-dir=xxx`, the default
@@ -386,6 +387,7 @@ Extra Packages Required
 
 A list of extra (potentially non-standard) packages you may need to install is below:
 
+- DateTime::Duration::Parse (libtime-duration-parse-perl)
 - DateTime::Format::SQLite (libdatetime-format-sqlite-perl)
 - DBD::SQLite
 - File::Homedir
