@@ -213,6 +213,9 @@ my $opt;
 my $conf;
 my $param;
 
+my %num_progs_per_channel;      # Map channel id to number of programmes on that channel.
+my %channel_names;              # Map channel id to canonical name.
+
 my %catmap_major = (
                     movie => "\N{CLAPPER BOARD}",
                     news => "\N{NEWSPAPER}",
@@ -317,6 +320,7 @@ my %catmap_minor = (
                            download-only
                            no-download
                            no-prune
+                           no-output-bad-channel-details
                            no-channel-output
                            merge-split=n
                            artwork-max-width=n
@@ -1562,6 +1566,8 @@ my $crewMap =
 
 finalize:
 
+output_bad_channel_list();
+
 if (!$opt->{'no-prune'}) {
     my ($t_prunestart, $t_pruneend);
     print (STDERR "Pruning the local database\n") if (!$quiet);
@@ -1672,6 +1678,27 @@ sub human_number {
     return "$value bytes";
 }
 
+
+# Determine channels for which we have no guide data and warn the user.
+sub output_bad_channel_list {
+    my @bad_list;
+    my $num_good = 0;
+    my $num_bad = 0;
+    for my $id (keys %channel_names) {
+        if ($num_progs_per_channel{$id}) {
+            ++$num_good;
+        } else {
+            push @bad_list, sprintf "%-40s\tI$id", $channel_names{$id} // $id;
+            ++$num_bad;
+        }
+    }
+    print STDERR "Got $num_good channels with schedule data for the requested days.\n";
+    print STDERR "Got $num_bad channels without any schedule data for the requested days.\n";
+    if ($num_bad && !$opt->{'no-output-bad-channel-details'}) {
+        print STDERR "\t$_\n" for (sort @bad_list);
+    }
+}
+
 sub output_xml {
 my $use_benchmark = use_benchmark();
 
@@ -1691,16 +1718,20 @@ $w->startTag('tv',
              'generator-info-url'    => $SCRIPT_URL,
              'source-info-name'      => $SD_DESC,
              'source-info-url'       => $SD_SITEURL );
-
-if (!get_option('no-channel-output')) {
+{
+  # We always process the channels so we can determine if some channels
+  # don't have guide data.
   $t_chanstart = Benchmark->new if $use_benchmark;
-  my $channelsWritten = channelWriter($conf->{'lineup'}, $w);
+  my $do_write = !get_option('no-channel-output');
+  my $channelsWritten = channelWriter($conf->{'lineup'}, $w, $do_write);
   $t_chanend = Benchmark->new if $use_benchmark;
 
-  if ($use_benchmark) {
-      printf (STDERR "   $channelsWritten channels processed took %s\n", Benchmark::timestr(Benchmark::timediff($t_chanend, $t_chanstart))) if (!$quiet);
-  } else {
-      print (STDERR "   $channelsWritten channels processed\n") if (!$quiet);
+  if ($do_write) {
+      if ($use_benchmark) {
+          printf (STDERR "   $channelsWritten channels processed took %s\n", Benchmark::timestr(Benchmark::timediff($t_chanend, $t_chanstart))) if (!$quiet);
+      } else {
+          print (STDERR "   $channelsWritten channels processed\n") if (!$quiet);
+      }
   }
 }
 
@@ -1890,6 +1921,13 @@ sub output_program {
                                                  );
     state $merge_split = $opt->{'merge-split'} // $conf->{'merge-split'};
     state $channelShortDaysExcludeRegex = get_option('channel-short-days-exclude-regex');
+
+    # Record that the station has a programme _before_ the exclude regexes.
+    # This is because we later want to find stations that we have that do not
+    # have any programmes association with them since SD has a habit of
+    # silently dropping stations from the guide.
+    my $sched_station = $r->[0];
+    ++$num_progs_per_channel{$sched_station};
 
     my $stationDetails;
     # Shortcut decode logic (if possible) if user hasn't given regex.
@@ -3819,7 +3857,7 @@ sub listChannels
                  'source-info-name'      => $SD_DESC,
                  'source-info-url'       => $SD_SITEURL );
 
-    my $channelsWritten = channelWriter($conf->{'lineup'}, $w);
+    my $channelsWritten = channelWriter($conf->{'lineup'}, $w, 1);
 
     $w->endTag('tv');
     $w->end();
@@ -3859,12 +3897,13 @@ sub sql_generate_lineup_query {
 #   Input:
 #              lineup(s)   - the lineup(s) to use
 #              writer      - the xmltv writer
+#              do_write    - do actual write (vs. cache for summary)
 #   Output:
 #              written     - number of channels written
 #
 sub channelWriter
   {
-    my ($lineups, $writer, undef) = @_;
+    my ($lineups, $writer, $do_write) = @_;
 
     my $sql;
     my $sth;
@@ -3910,8 +3949,13 @@ sub channelWriter
           {
             $s = $JSON->decode($r->[3]);
           }
+
         next if $channelRegex        && $s->{name} && $s->{name} !~ $channelRegex;
         next if $channelExcludeRegex && $s->{name} && $s->{name} =~ $channelExcludeRegex;
+
+        # Cache channel names from the DB so we can print end summary.
+        $channel_names{$sID} = $s->{name} // $sID;
+        next unless $do_write;
 
         $writer->startTag('channel', 'id' => generateRFC2838($sID) ) ;
 

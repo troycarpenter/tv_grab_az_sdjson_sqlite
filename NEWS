@@ -1,4 +1,6 @@
 User-visible and notable changes. For new options, see the README.md.
+* 201905
+- New option 'no-output-bad-channel-details'. We now output a list of channels for which we have no guide data and this avoids informing the user of these channels.
 * 201903
 - New option 'update-category-with-grabber' to add an 'xmltv' tag to categories in programmes. See README.md for details.
 

@@ -300,6 +300,10 @@ and all the other channels are then marked as boring.
 For example: --channel-short-days=3 --channel-short-days-exclude-regex="BBC|Movie|PBS"
 * --no-download
 Do not download the schedule, use database cache only.
+* --no-output-bad-channel-details
+SchedulesDirect frequently has channels for which it no longer publishes guide data.
+So we now output a list of these channels so end clients can be updated. Use this option
+to avoid a detailed list of these bad channels being displayed.
 * --no-prune
 Do not prune the database of old schedules. Useful if running multiple times.
 * --no-channel-output
