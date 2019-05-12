@@ -1688,7 +1688,20 @@ sub output_bad_channel_list {
         if ($num_progs_per_channel{$id}) {
             ++$num_good;
         } else {
-            push @bad_list, sprintf "%-40s\tI$id", $channel_names{$id} // $id;
+            my $name = $channel_names{$id} // $id;
+            my $try = $name;
+            if ($name =~ /HD$/) { $try =~ s/ ?U?HD//; }
+            else {$try .= " HD"; }
+            my @good_try;
+            if ($name ne $try) {
+                for my $key (keys %channel_names) {
+                    if (eval {$channel_names{$key} =~ /$name/i} && $num_progs_per_channel{$key}) {
+                        push @good_try, qq!"I$key ($channel_names{$key})"!;
+                    }
+                }
+            }
+            my $good_tries = scalar @good_try ? "Maybe try: " . join " or ", @good_try : "";
+            push @bad_list, sprintf "%-40s\tI$id\t$good_tries", $name;
             ++$num_bad;
         }
     }
