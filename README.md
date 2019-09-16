@@ -396,6 +396,7 @@ A list of extra (potentially non-standard) packages you may need to install is b
 - DateTime::Format::SQLite (libdatetime-format-sqlite-perl)
 - DBD::SQLite
 - File::Homedir
+- IPC::Run3 (libipc-run3-perl)
 - JSON
 - JSON::XS (libjson-xs-perl)
 - LWP::Protocols::https (liblwp-protocol-https-perl)
@@ -413,8 +414,16 @@ The other modules used are typically already installed as part of xmltv.
 Different distributions may have different dependencies but this will install dependencies
 on some distributions:
 ```shell-script
-sudo apt install xmltv libdatetime-format-sqlite-perl libjson-xs-perl liblwp-protocol-https-perl liburi-escape-xs-perl libchi-perl libchi-driver-redis-perl
+sudo apt install xmltv libdatetime-format-sqlite-perl libipc-run3-perl libjson-xs-perl liblwp-protocol-https-perl liburi-escape-xs-perl libchi-perl libchi-driver-redis-perl
 ```
+
+Some distributions might ship with fewer dependencies pre-installed as
+part of the base system.  If you have an error stating "you may need
+to install the ABC::DEF module" then you can normally install it using
+`sudo apt install libabc-def-perl` (note the installed package name is
+all lowercase and has `lib` prefix and `-perl` suffix). If this does
+not work, you can normally find the package name using
+`apt search libabc-def-perl` or `apt search ABC::DEF`.
 
 Miscellaneous Information
 -------------------------
