@@ -51,7 +51,6 @@ Currently implemented fixups:
 
         Known apps: MythTV (feature request posted)
 
-
     NO_MULTIPLE_STATION_LOGOS
 
         Only return the first station logo/icon.  This is mostly useful
