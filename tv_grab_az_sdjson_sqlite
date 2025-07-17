@@ -3415,6 +3415,10 @@ sub write_programme_details {
 
           if ($artURI) {
             my $url = $SD->uriResolve($artURI, '/image');
+            # Append the token if available
+            if ($SD && $SD->{_Token}) {
+                $url .= "?token=$SD->{_Token}";
+            }
             if ($artWidth && $artHeight) {
                 $w->emptyTag('icon', 'src' => $url,
                              'width' => $artWidth,
