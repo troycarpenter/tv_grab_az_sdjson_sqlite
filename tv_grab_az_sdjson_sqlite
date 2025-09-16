@@ -123,7 +123,8 @@ use utf8;
 
 STDERR->autoflush(1);                          # Autoflush STDERR
 
-use XMLTV 0.005067;
+#use XMLTV 0.005067;
+use XMLTV;
 use XMLTV::Options qw/ParseOptions/;
 use XMLTV::Configure::Writer;
 use XMLTV::Configure qw/LoadConfig SaveConfig/;
@@ -157,13 +158,21 @@ use Data::Dumper;
 my $RFC2838_COMPLIANT          = 1;            # RFC2838 compliant station ids, which makes XMLTV
                                                # validate even though the docs say "SHOULD" not "MUST"
 
+my $ARTCACHE                   = '/etc/zap2xml/cache';
+my $ARTHTTP                    = 'http://neon-desktop.carpenter.cx:8585/';
+my $ARTDL                      = 0;
+my $ARTSK		       = 0;
+my $SkipAllArt                 = 0;
+my $ARTProgID;
+my $ARTCacheID;
+
 # Has to be a "CVS" Id string for XMLTV::Options.
-my $SCRIPT_VERSION             = '$Id: tv_grab_az_sdjson_sqlite,v 1.57 3976d0 2019/06/22 01:19:00 gtb Exp ed $';
+my $SCRIPT_VERSION             = '1.141';
 my $SCRIPT_URL                 = 'https://github.com/azlm8t/tv_grab_zz_sdjson_sqlite';
 my $SCRIPT_NAME                = basename("$0");
 my $SCRIPT_NAME_DIR            = dirname("$0");
 
-my $SCRIPT_DB_VERSION          = 4;            # Used for script/db updates (see DB_open_global)
+my $SCRIPT_DB_VERSION          = 5;            # Used for script/db updates (see DB_open_global)
 
 my $SD_DESC                    = 'Schedules Direct';
 my $SD_SITEURL                 = 'https://www.schedulesdirect.org';
@@ -180,7 +189,7 @@ my $SD_ARTWORK_CHUNK           = 500;          # Request artwork data in chunk s
 
 my $JSON                       = JSON->new()->shrink(1)->utf8(1);
 
-my $SD = SchedulesDirect->new();
+my $SD = SchedulesDirect->new(UserAgent => "$SCRIPT_NAME ($^O) $SCRIPT_NAME/$SCRIPT_VERSION xmltv/$XMLTV::VERSION perl/" . sprintf("%vd", $^V) . " ");
 
 my $DBH;                                       # DataBase Handle
 
@@ -194,9 +203,10 @@ foreach my $fixup(split(':', $ENV{'TV_GRAB_TARGET_APPLICATION_FIXUPS'} || ''))
   }
 
 my $quiet = 0;
-my $debug = 0;
-
+my $debug = 1;
 my $download = 1;
+my $retries = 2;
+
 my $num_prog_from_cache = 0;
 my $num_prog_details_not_from_cache = 0;
 my $num_prog_details_total = 0;
@@ -723,7 +733,7 @@ else
 # not have current information based on hash values and
 # feed to our DB
 #
-for (my $retry = 0; $retry < 7; $retry++)
+for (my $retry = 0; $retry < $retries; $retry++)
   {
 
     my $downloadQueued = 0;
@@ -982,7 +992,7 @@ my %artworkProgram;
 # we do not have current information based on hash values
 # and feed to our DB
 #
-for (my $retry = 0; $retry < 7; $retry++)
+for (my $retry = 0; $retry < $retries; $retry++)
   {
     my $downloadQueued = 0;
 
@@ -1143,7 +1153,7 @@ for (my $retry = 0; $retry < 7; $retry++)
 # Obtain the program supplemental information for programs
 # for which we do not have current information
 #
-for (my $retry = 0; $retry < 7; $retry++)
+for (my $retry = 0; $retry < $retries; $retry++)
   {
     my $startDateTime = DateTime->now(time_zone => 'UTC')->add(days => $opt->{'offset'});
     my $endDateTime = DateTime->now(time_zone => 'UTC')->add(days => $opt->{'offset'})->add(days => $opt->{'days'});
@@ -1313,7 +1323,7 @@ if (!defined($sth4))
       exit(1);
   }
 
-for (my $retry = 0; $retry < 7; $retry++)
+for (my $retry = 0; $retry < $retries; $retry++)
   {
     my $downloadQueued = 0;
     my $numArtwork = scalar keys %artworkProgram;
@@ -1348,7 +1358,7 @@ for (my $retry = 0; $retry < 7; $retry++)
             {
                 print (STDERR "Unexpected error when obtaining artwork: " . $SD->ErrorString() . " (will retry)\n") if (!$quiet);
                 $downloadQueued = 1;
-                next;
+#                next;
                 exit(1);
             }
 
@@ -1707,6 +1717,8 @@ sub output_bad_channel_list {
     }
     print STDERR "Got $num_good channels with schedule data for the requested days.\n";
     print STDERR "Got $num_bad channels without any schedule data for the requested days.\n";
+    print STDERR "Downloaded $ARTDL artwork files.\n";
+    print STDERR "Skipped $ARTSK existing artwork files.\n";
     if ($num_bad && is_correct_day_for_opt('output-bad-channel-details')) {
         print STDERR "\t$_\n" for (sort @bad_list);
     }
@@ -1721,7 +1733,8 @@ $t_start = Benchmark->new if $use_benchmark;
 my $w = XML::Writer->new( 'ENCODING' => 'UTF-8',
                           'DATA_MODE' => 1,
                           'DATA_INDENT' => 1,
-                          'UNSAFE' => (!$debug) );
+#                          'UNSAFE' => (!$debug) );
+                          'UNSAFE' => 1 );
 
 $w->xmlDecl('UTF-8');
 $w->comment($SD_COMMENT);
@@ -1860,7 +1873,7 @@ order by schedules.station, schedules.starttime";
       $stat_details, $sup_details,
       $art_details, $supart_details,
       $prog_hash, $sup_hash,
-      $sup_id);
+      $sup_id, $prog_sup);
   # Nb: 1-based not 0-based.
   $sth->bind_col( 1, \$sched_station, SQL_VARCHAR );
   $sth->bind_col( 2, \$sched_starttime, SQL_DATETIME );
@@ -1887,7 +1900,7 @@ order by schedules.station, schedules.starttime";
                                           $stat_details, $sup_details,
                                           $art_details, $supart_details,
                                           $prog_hash, $sup_hash,
-                                          $sup_id,
+                                          $sup_id
                                          ]
                                         );
   }
@@ -1934,6 +1947,9 @@ sub output_program {
                                                  );
     state $merge_split = $opt->{'merge-split'} // $conf->{'merge-split'};
     state $channelShortDaysExcludeRegex = get_option('channel-short-days-exclude-regex');
+
+    $ARTProgID = $ARTCacheID = $r->[3];
+    if (defined($r->[14])) { $ARTCacheID=$r->[14];}
 
     # Record that the station has a programme _before_ the exclude regexes.
     # This is because we later want to find stations that we have that do not
@@ -2989,6 +3005,52 @@ sub write_programme_i {
     return 1;
 }
 
+
+### Write artwork to physical cache and return URL to that cache
+sub tlc_artcache {
+  my ($file, $url) = @_;
+
+  my ($basename, $parentdir, $extension) = fileparse($file, qr/\.[^.]*$/);
+
+  my $cachefile  = $ARTCacheID . $extension;
+  my $cache      = $ARTCACHE . '/' . $cachefile;
+  my $artwork    = $ARTHTTP . $ARTCacheID . $extension;
+
+  print STDERR "DEBUG: Entering tlc_artcache with file: $file, cache file: $cache " if $debug;
+
+### NEED TO UPDATE artwork TABLE with cache-file=ARTCacheID where program = $ARTProgID	
+
+#  my $sql = "UPDATE artwork set cache_file = '$ARTCacheID' WHERE program = '$ARTProgID';
+
+  if (!$SkipAllArt) {
+      if (-e $cache) {
+         print STDERR "(Skipped)\n" if $debug;
+         $ARTSK++;
+      }
+      else {
+         print STDERR "(Downloading)\n" if $debug;
+         if (system("wget -qO $cache $url") == 0) {
+            $ARTDL++;
+         }
+         else {
+             print STDERR "DEBUG: Bad Art Return Code. Skipping all remaining art.\n" if $debug;
+             $SkipAllArt = 1;
+             $artwork="";
+         }
+      }
+  }
+  else {
+      print STDERR "DEBUG:  Skipping all art\n" if $debug;
+      $artwork="";
+  }  
+
+  print STDERR "DEBUG: Returning icon URL: $artwork\n" if $debug;
+
+  return $artwork;
+
+}
+
+
 sub write_programme {
     my ($w, $r2) = @_;
 
@@ -3086,7 +3148,7 @@ sub write_programme_details {
     $w->dataElement('title', $title) if ($title);
     my $sub_title = get_sub_title($r2);
     $w->dataElement('sub-title', $sub_title) if $sub_title;
-    my $w2 = LightXMLWriter->new;
+    my $w2 = LightXMLWriter->new(UNSAFE => 1);
         # XMLTV roles for this program
         my $roles =
           {
@@ -3414,13 +3476,22 @@ sub write_programme_details {
           }
 
           if ($artURI) {
-            my $url = $SD->uriResolve($artURI, '/image');
-            if ($artWidth && $artHeight) {
-                $w->emptyTag('icon', 'src' => $url,
-                             'width' => $artWidth,
-                             'height' => $artHeight);
-            } else {
-                $w->emptyTag('icon', 'src' => $url);
+            my $DLurl = $SD->uriResolve($artURI, '/image');
+            # Append Token
+            if ($SD && $SD->{_Token}) {
+                $DLurl .= "?token=$SD->{_Token}";
+            }
+
+            my $url = tlc_artcache($artURI, $DLurl);
+
+            if ($url ne "") {
+                if ($artWidth && $artHeight) {
+                    $w->emptyTag('icon', 'src' => $url,
+                                 'width' => $artWidth,
+                                 'height' => $artHeight);
+                } else {
+                    $w->emptyTag('icon', 'src' => $url);
+                }
             }
         }
         # Prefer episode id to series id if we have both.
@@ -3436,6 +3507,7 @@ sub write_programme_details {
           }
 
         my $prodid = $pID;
+
         if (length($prodid) == 14)
           {
             $prodid = substr($prodid, 0, 10) . '.' . substr($prodid, 10, 4);
@@ -3642,7 +3714,8 @@ sub configureGrabber
 
     my $writer = XMLTV::Configure::Writer->new( OUTPUT => \$result,
                                                 grabber => $SCRIPT_NAME,
-                                                encoding => 'iso-8859-1' );
+                                                encoding => 'iso-8859-1',
+                                                UNSAFE => 1 );
     $writer->start ( { grabber => $SCRIPT_NAME } );
 
     if ($stage eq 'start')
@@ -3885,7 +3958,8 @@ sub listChannels
     my $w = XML::Writer->new( 'ENCODING' => 'UTF-8',
                               'DATA_MODE' => 1,
                               'DATA_INDENT' => 1,
-                              'OUTPUT' => 'self' );
+                              'OUTPUT' => 'self',
+                              'UNSAFE' => 1 );
     $w->xmlDecl('UTF-8');
     $w->comment($SD_COMMENT);
     $w->doctype( 'tv', undef, 'xmltv.dtd' );
@@ -4136,7 +4210,7 @@ sub listLineups
 
     $sth->finish();
 
-    my $w = XML::Writer->new( 'ENCODING' => 'UTF-8', 'DATA_MODE' => 1, 'DATA_INDENT' => 1, OUTPUT => 'self' );
+    my $w = XML::Writer->new( 'ENCODING' => 'UTF-8', 'DATA_MODE' => 1, 'DATA_INDENT' => 1, OUTPUT => 'self', UNSAFE => 1 );
     $w->xmlDecl('UTF-8');
     $w->comment('Note: list-lineups and get-lineup is still unofficial in XMLTV, and the format and content of this xml is liable to change.');
     $w->comment($SD_COMMENT);
@@ -4202,7 +4276,7 @@ sub getLineup
     check_cache_clear();
     lineupFetchAndValidate($conf);
 
-    my $w = XML::Writer->new( 'ENCODING' => 'UTF-8', 'DATA_MODE' => 1, 'DATA_INDENT' => 1, OUTPUT => 'self' );
+    my $w = XML::Writer->new( 'ENCODING' => 'UTF-8', 'DATA_MODE' => 1, 'DATA_INDENT' => 1, OUTPUT => 'self', UNSAFE => 1 );
     $w->xmlDecl('UTF-8');
     $w->comment('Note: list-lineups and get-lineup is still unofficial in XMLTV, and the format and content of this xml is liable to change.');
     $w->comment($SD_COMMENT);
@@ -5578,6 +5652,47 @@ sub DB_open_local {
               DB_settingsSet($db, 'version', $version);
               $db->commit();
           }
+
+        if (4 == $version)
+          {
+              $version = 5;
+              print (STDERR "Updating database to version $version\n") if (!$quiet);
+              $rc = $db->do("alter table artwork add column cache_file varchar(128)");
+              if ((!defined($rc)) || ($rc < 0))
+                {
+                  print (STDERR "Unable to add column cache_file to artwork table in database $dbname: " . $db->errstr . "\n");
+                  $db->rollback();
+                  exit(1);
+                }
+              $rc = $db->do("create index artwork_index_cache_file on artwork(cache_file)");
+              if ((!defined($rc)) || ($rc < 0))
+                {
+                  print (STDERR "Unable to create artwork_index_cache_file in database $dbname: " . $db->errstr . "\n");
+                  $db->rollback();
+                  exit(1);
+                }
+              #Populate new field with cache file name.  Assume SD graphics are .jpg format for conversion purposes.
+              $sql = "UPDATE artwork SET cache_file = (SELECT CASE WHEN p.program_supplemental is not null THEN p.program_supplemental || '.jpg' ELSE p.program || '.jpg' END FROM programs AS p WHERE p.program = artwork.program) WHERE EXISTS (SELECT 1 FROM programs AS p WHERE p.program = artwork.program)";
+              $sth = $db->prepare_cached($sql);
+              if (!defined($sth))
+                {
+                  print (STDERR "Unexpected error when preparing statement ($sql): " . $db->errstr . "\n");
+                  $db->rollback();
+                  exit(1);
+                }
+              $sth->execute();
+              if ($sth->err)
+                {
+                  print (STDERR "Unexpected error when executing statement ($sql): " . $sth->errstr . "\n");
+                  $db->rollback();
+                  exit(1);
+                }
+
+
+              DB_settingsSet($db, 'version', $version);
+              $db->commit();
+          }     
+
 
         ##
         ##  if (2 == $version   ## Example upgrade (version 2 to 3)
@@ -8921,10 +9036,11 @@ sub _obtainProgramsCommon
 
     $request->content($self->{'_JSON'}->encode(\@programs));
 
-    print (STDERR "DEBUG:   HTTP request:\n" . Data::Dumper->new([$request])->Pad('DEBUG:   ')->Useqq(1)->Dump) if ($self->{'Debug'});
+#    print (STDERR "DEBUG:   HTTP request:\n" . Data::Dumper->new([$request])->Pad('DEBUG:   ')->Useqq(1)->Dump) if ($self->{'Debug'});
 
     my $response = $self->{'_LWP'}->request($request);
 
+#    print (STDERR "DEBUG: Obtain $url:\n");
     print (STDERR "DEBUG:   HTTP response:\n" . Data::Dumper->new([$response])->Pad('DEBUG:   ')->Useqq(1)->Dump) if ($self->{'Debug'});
 
     my $responseCode = $response->code();
@@ -8984,7 +9100,7 @@ sub obtainPrograms
   {
     my $self = shift;
 
-    print (STDERR "DEBUG: Entering " . (caller(0))[3] . " with args: \n" . Data::Dumper->new(\@_)->Pad('DEBUG:   ')->Useqq(1)->Dump) if ($self->{'Debug'});
+#    print (STDERR "DEBUG: Entering " . (caller(0))[3] . " with args: \n" . Data::Dumper->new(\@_)->Pad('DEBUG:   ')->Useqq(1)->Dump) if ($self->{'Debug'});
     return $self->_obtainProgramsCommon("programs", @_);
   }
 
@@ -8995,8 +9111,8 @@ sub obtainProgramsArtwork
   {
     my $self = shift;
 
-    print (STDERR "DEBUG: Entering " . (caller(0))[3] . " with args: \n" . Data::Dumper->new(\@_)->Pad('DEBUG:   ')->Useqq(1)->Dump) if ($self->{'Debug'});
-    return $self->_obtainProgramsCommon("metadata/programs", @_);
+#    print (STDERR "DEBUG: Entering " . (caller(0))[3] . " with args: \n" . Data::Dumper->new(\@_)->Pad('DEBUG:   ')->Useqq(1)->Dump) if ($self->{'Debug'});
+    return $self->_obtainProgramsCommon("metadata/programs/", @_);
   }
 
 #
