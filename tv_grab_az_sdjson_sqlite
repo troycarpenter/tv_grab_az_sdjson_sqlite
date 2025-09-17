@@ -2,6 +2,8 @@
 #
 # tv_grab_az_sdjson_sqlite
 #
+# Copyright (c) 2025 Troy Carpenter <troy@carpenter.cx>
+# Copyright (C) azlm8t
 # Copyright (c) 2016, 2017 Gary Buhrmaster <gary.buhrmaster@gmail.com>
 #
 # This code is distributed under the GNU General Public License v2 (GPLv2)
@@ -44,6 +46,7 @@
 #
 # Version history:
 #
+# 2025/09/16 - 1.135 - Update to include local http cache for artwork
 # 2017/11/30 - 1.35 - Populate thetvdb episode-num.
 # 2017/10/11 - 1.34 - download artwork.
 # 2018/11/10 - 1.60 - include subscription info in additional paths
@@ -123,7 +126,6 @@ use utf8;
 
 STDERR->autoflush(1);                          # Autoflush STDERR
 
-#use XMLTV 0.005067;
 use XMLTV;
 use XMLTV::Options qw/ParseOptions/;
 use XMLTV::Configure::Writer;
@@ -167,8 +169,8 @@ my $ARTProgID;
 my $ARTCacheID;
 
 # Has to be a "CVS" Id string for XMLTV::Options.
-my $SCRIPT_VERSION             = '1.141';
-my $SCRIPT_URL                 = 'https://github.com/azlm8t/tv_grab_zz_sdjson_sqlite';
+my $SCRIPT_VERSION             = '1.135';
+my $SCRIPT_URL                 = 'https://github.com/troycarpenter/tv_grab_az_sdjson_sqlite';
 my $SCRIPT_NAME                = basename("$0");
 my $SCRIPT_NAME_DIR            = dirname("$0");
 
