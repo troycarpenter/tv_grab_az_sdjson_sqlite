@@ -160,10 +160,11 @@ use Data::Dumper;
 my $RFC2838_COMPLIANT          = 1;            # RFC2838 compliant station ids, which makes XMLTV
                                                # validate even though the docs say "SHOULD" not "MUST"
 
-my $ARTCACHE                   = '/etc/zap2xml/cache';
-my $ARTHTTP                    = 'http://neon-desktop.carpenter.cx:8585/';
+## Globals related to artwork cache
+my $ARTCACHE                   = '/etc/zap2xml/cache'; #local cache directory
+my $ARTHTTP                    = 'http://neon-desktop.carpenter.cx:8585/'; #URL for artwork cache
 my $ARTDL                      = 0;
-my $ARTSK		       = 0;
+my $ARTSK                      = 0;
 my $SkipAllArt                 = 0;
 my $ARTProgID;
 my $ARTCacheID;

@@ -1,0 +1,52 @@
+#!/usr/bin/perl -w
+#
+# This script generates a fake channel lineup xmltv.xml file.
+#
+
+use DateTime;
+
+my $channel_id    = "KWTXDT6.tlc";
+my $channel_name  = "KWTX-DT6";
+my $channel_name2 = "KWTXDT6";
+my $channel_num   = "10.6";
+my $program_title = "KWTX 24/7 Weather";
+my $program_desc  = "All weather all the time";
+my $channel_url   = "http://neon-desktop.carpenter.cx:8585/kwtxdt6-channel.jpg";
+my $program_url   = "http://neon-desktop.carpenter.cx:8585/kwtxdt6-program.jpg";
+
+my $days          = 14;
+my $entries       = $days * 24;
+
+my $cdt           = DateTime->now(time_zone=>'America/Chicago');
+my $year          = $cdt->year;
+my $month         = $cdt->month;
+my $day           = $cdt->day;
+
+my $sdt            =  DateTime->new(year=>$year,month=>$month,day=>$day,hour=>0,minute=>0,second=>0);
+my $edt            =  DateTime->new(year=>$year,month=>$month,day=>$day,hour=>1,minute=>0,second=>0);     
+
+print "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n";
+print "<tv date=\"" . $cdt->mdy('/') . " " . $cdt->hms . "\" source-info-url=\"\" source-info-name=\"\" generator-info-name=\"\" generator-info-url=\"\">\n";
+print "  <channel id=\"$channel_id\">\n";
+print "    <display-name>$channel_name</display-name>\n";
+print "    <display-name>$channel_name2</display-name>\n";
+print "    <display-name>$channel_num</display-name>\n";
+print "    <icon src=\"$channel_url\" width=\"360\" height=\"270\" />\n";
+print "  </channel>\n";
+
+for (my $i=1; $i<$entries; $i++) {
+   $sdt->add(hours => 1);   
+   $edt->add(hours => 1);
+   $ss = sprintf("%04u%02u%02u%02u%02u%02u -0500", $sdt->year,$sdt->month,$sdt->day,$sdt->hour,$sdt->minute,$sdt->second);
+   $es = sprintf("%04u%02u%02u%02u%02u%02u -0500", $edt->year,$edt->month,$edt->day,$edt->hour,$edt->minute,$edt->second);
+
+   print "  <programme channel=\"$channel_id\" start=\"$ss\" stop=\"$es\">\n";
+   print "    <title>$program_title</title>\n";
+   print "    <desc>$program_desc</desc>\n";
+   print "     <category>News</category>\n";
+   print "    <icon src=\"$program_url\" width=\"540\" height=\"720\" />\n";
+   print "  </programme>\n";
+}
+
+print "</tv>\n";
+
