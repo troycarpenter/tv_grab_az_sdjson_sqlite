@@ -13,6 +13,7 @@ my $program_title = "KWTX 24/7 Weather";
 my $program_desc  = "All weather all the time";
 my $channel_url   = "http://neon-desktop.carpenter.cx:8585/kwtxdt6-channel.jpg";
 my $program_url   = "http://neon-desktop.carpenter.cx:8585/kwtxdt6-program.jpg";
+my $program_type  = "News";
 
 my $days          = 14;
 my $entries       = $days * 24;
@@ -43,7 +44,7 @@ for (my $i=1; $i<$entries; $i++) {
    print "  <programme channel=\"$channel_id\" start=\"$ss\" stop=\"$es\">\n";
    print "    <title>$program_title</title>\n";
    print "    <desc>$program_desc</desc>\n";
-   print "     <category>News</category>\n";
+   print "    <category>$program_type</category>\n";
    print "    <icon src=\"$program_url\" width=\"540\" height=\"720\" />\n";
    print "  </programme>\n";
 }
