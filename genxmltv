@@ -11,8 +11,11 @@ my $channel_name2 = "KWTXDT6";
 my $channel_num   = "10.6";
 my $program_title = "KWTX 24/7 Weather";
 my $program_desc  = "All weather all the time";
-my $channel_url   = "http://neon-desktop.carpenter.cx:8585/kwtxdt6-channel.jpg";
-my $program_url   = "http://neon-desktop.carpenter.cx:8585/kwtxdt6-program.jpg";
+my $cache_url     = "http://neon-desktop.carpenter.cx:8585/";
+my $channel_pic   = "kwtxdt6-channel.jpg";
+my $program_pic   = "kwtxdt6-program.jpg";
+my $channel_url   = $cache_url . $channel_pic;
+my $program_url   = $cache_url . $program_pic;
 my $program_type  = "News";
 
 my $days          = 14;
@@ -51,3 +54,9 @@ for (my $i=1; $i<$entries; $i++) {
 
 print "</tv>\n";
 
+# Touch the channel/program pics to avoid the cache cleanup command
+
+my $cache_dir      = "/etc/zap2xml/cache/";
+my $cmd = "touch $cache_dir$channel_pic $cache_dir$program_pic";
+
+system($cmd);

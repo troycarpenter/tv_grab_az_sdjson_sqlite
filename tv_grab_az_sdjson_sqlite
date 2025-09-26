@@ -392,6 +392,9 @@ my $channelExcludeRegex = $opt->{'channel-exclude-regex'};
 
 $SD->Debug(1) if ($debug);
 
+my $cdt           = DateTime->now(time_zone=>'America/Chicago');
+print STDERR $cdt->mdy('/') . " " . $cdt->hms . "\n";
+
 #
 # Special case for managing lineups
 #
@@ -3027,7 +3030,8 @@ sub tlc_artcache {
 
   if (!$SkipAllArt) {
       if (-e $cache) {
-         print STDERR "(Skipped)\n" if $debug;
+         print STDERR "(Touched)\n" if $debug;
+         system("touch $cache");
          $ARTSK++;
       }
       else {
